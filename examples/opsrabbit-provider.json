@@ -1,0 +1,15 @@
+{
+  "provider": "openai-compatible",
+  "base_url": "http://<private-host>:8000/v1",
+  "api_key": "${OPSRABBIT_LLM_API_KEY}",
+  "api_mode": "openai-completions",
+  "model_id": "glm-5.2-w4afp8",
+  "context_window": 131072,
+  "max_output_tokens": 8192,
+  "supports_reasoning": true,
+  "supports_reasoning_effort": true,
+  "supports_images": false,
+  "supports_developer_role": false,
+  "supports_store": false,
+  "max_tokens_field": "max_tokens"
+}
