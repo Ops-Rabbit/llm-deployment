@@ -16,6 +16,7 @@ source "$CONFIG_FILE"
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 runtime_args=()
+runtime_environment_args=()
 if [[ -r "$RUNTIME_ARGS_FILE" ]]; then
   while IFS= read -r runtime_arg || [[ -n "$runtime_arg" ]]; do
     [[ -z "$runtime_arg" || "$runtime_arg" == \#* ]] && continue
@@ -54,6 +55,14 @@ case "$RUNTIME" in
     rm -f "$BACKEND_SOCKET"
     docker_entrypoint_args=(--entrypoint bash)
     network_args=(--network none)
+    vllm_gpu_memory_utilization=0.85
+    if [[ "$MODEL_PROFILE" == "glm-5.2-w4a16-a100" ]]; then
+      vllm_gpu_memory_utilization=0.92
+      runtime_environment_args+=(
+        --env VLLM_USE_FLASHINFER_SAMPLER=0
+        --env VLLM_USE_DEEP_GEMM=0
+      )
+    fi
     server_args=(
       -c 'umask 007; exec python3 "$@"' opsrabbit-vllm
       -m vllm.entrypoints.openai.api_server
@@ -63,8 +72,16 @@ case "$RUNTIME" in
       --uds "$BACKEND_SOCKET"
       --tensor-parallel-size "$GPU_COUNT"
       --max-model-len "$CONTEXT_LENGTH"
-      --gpu-memory-utilization 0.85
+      --gpu-memory-utilization "$vllm_gpu_memory_utilization"
     )
+    if [[ "$MODEL_PROFILE" == "glm-5.2-w4a16-a100" ]]; then
+      server_args+=(
+        --dtype bfloat16
+        --reasoning-parser glm45
+        --tool-call-parser glm47
+        --enable-auto-tool-choice
+      )
+    fi
     ;;
   *)
     printf 'Unsupported runtime in %s: %s\n' "$CONFIG_FILE" "$RUNTIME" >&2
@@ -110,6 +127,7 @@ exec docker run --rm \
   --env HF_HUB_DISABLE_TELEMETRY=1 \
   --env HF_HUB_OFFLINE=1 \
   --env TRANSFORMERS_OFFLINE=1 \
+  "${runtime_environment_args[@]}" \
   --volume "$MODEL_CACHE_DIR:/root/.cache/huggingface" \
   --volume "$DATA_DIR/torch:/root/.cache/torch" \
   --volume "$DATA_DIR/sglang:/root/.cache/sglang" \

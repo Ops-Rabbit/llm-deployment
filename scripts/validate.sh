@@ -22,6 +22,7 @@ done
 bash -n ./lib/common.sh
 
 ./tests/common_test.sh
+./tests/profile_test.sh
 ./tests/repository_test.sh
 ./install.sh --help >/dev/null
 ./scripts/healthcheck.sh --help >/dev/null

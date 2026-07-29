@@ -7,14 +7,19 @@ readonly SCRIPT_DIR
 source "$SCRIPT_DIR/lib/common.sh"
 
 DATA_DIR=""
+PROFILE="h100"
 RUNTIME="sglang"
 MODEL_ID=$DEFAULT_MODEL_ID
 MODEL_REVISION=$DEFAULT_MODEL_REVISION
 SERVED_MODEL_NAME=$DEFAULT_SERVED_MODEL_NAME
 MODEL_PROFILE="glm-5.2-w4afp8"
+RUNTIME_WAS_SET=false
 MODEL_WAS_SET=false
 REVISION_WAS_SET=false
 SERVED_NAME_WAS_SET=false
+GPU_NAME_WAS_SET=false
+GPU_MEMORY_WAS_SET=false
+CONTEXT_LENGTH_WAS_SET=false
 TRUST_REMOTE_CODE=true
 TRUST_WAS_SET=false
 RUNTIME_ARGS_FILE=""
@@ -30,7 +35,7 @@ ORIGINAL_ARGS=("$@")
 usage() {
   cat <<'EOF'
 Install a model with an authenticated OpenAI-compatible API.
-The default profile is GLM-5.2 W4AFP8 on SGLang.
+The default profile is GLM-5.2 W4AFP8 on H100 with SGLang.
 
 Usage:
   sudo ./install.sh --data-dir PATH [options]
@@ -40,6 +45,7 @@ Required:
   --data-dir PATH           Existing mounted directory with at least 600 GiB free
 
 Options:
+  --profile NAME            h100 or a100 (default: h100)
   --runtime NAME            sglang or vllm (default: sglang)
   --model ID                Hugging Face model ID
   --model-revision REV      Required pinned revision for a custom model
@@ -67,9 +73,15 @@ EOF
 
 while (($#)); do
   case "$1" in
+    --profile)
+      [[ $# -ge 2 ]] || die "--profile requires a value."
+      PROFILE=$2
+      shift 2
+      ;;
     --runtime)
       [[ $# -ge 2 ]] || die "--runtime requires a value."
       RUNTIME=$2
+      RUNTIME_WAS_SET=true
       shift 2
       ;;
     --model)
@@ -108,11 +120,13 @@ while (($#)); do
     --gpu-name)
       [[ $# -ge 2 ]] || die "--gpu-name requires a value."
       REQUIRED_GPU_NAME=$2
+      GPU_NAME_WAS_SET=true
       shift 2
       ;;
     --min-gpu-memory-mib)
       [[ $# -ge 2 ]] || die "--min-gpu-memory-mib requires a value."
       MIN_GPU_MEMORY_MIB=$2
+      GPU_MEMORY_WAS_SET=true
       shift 2
       ;;
     --min-data-gib)
@@ -143,6 +157,7 @@ while (($#)); do
     --context-length)
       [[ $# -ge 2 ]] || die "--context-length requires a value."
       CONTEXT_LENGTH=$2
+      CONTEXT_LENGTH_WAS_SET=true
       shift 2
       ;;
     --api-key-file)
@@ -174,6 +189,39 @@ while (($#)); do
 done
 
 [[ -n "$DATA_DIR" ]] || die "--data-dir is required."
+case "$PROFILE" in
+  h100)
+    PROFILE_MODEL_ID=$DEFAULT_MODEL_ID
+    ;;
+  a100)
+    PROFILE_MODEL_ID=$A100_MODEL_ID
+    MODEL_PROFILE="glm-5.2-w4a16-a100"
+    if [[ "$RUNTIME_WAS_SET" != "true" ]]; then
+      RUNTIME="vllm"
+    fi
+    if [[ "$MODEL_WAS_SET" != "true" ]]; then
+      MODEL_ID=$A100_MODEL_ID
+    fi
+    if [[ "$REVISION_WAS_SET" != "true" ]]; then
+      MODEL_REVISION=$A100_MODEL_REVISION
+    fi
+    if [[ "$SERVED_NAME_WAS_SET" != "true" ]]; then
+      SERVED_MODEL_NAME=$A100_SERVED_MODEL_NAME
+    fi
+    if [[ "$GPU_NAME_WAS_SET" != "true" ]]; then
+      REQUIRED_GPU_NAME="A100"
+    fi
+    if [[ "$GPU_MEMORY_WAS_SET" != "true" ]]; then
+      MIN_GPU_MEMORY_MIB=79000
+    fi
+    if [[ "$CONTEXT_LENGTH_WAS_SET" != "true" ]]; then
+      CONTEXT_LENGTH=$A100_CONTEXT_LENGTH
+    fi
+    ;;
+  *)
+    die "Profile must be h100 or a100; received ${PROFILE}."
+    ;;
+esac
 DATA_DIR=$(canonicalize_data_directory "$DATA_DIR")
 [[ "$STARTUP_TIMEOUT" =~ ^[0-9]+$ ]] || die "Startup timeout must be a non-negative number."
 validate_runtime "$RUNTIME"
@@ -186,7 +234,7 @@ validate_positive_integer "Minimum data size" "$MIN_DATA_GIB"
 validate_positive_integer "Minimum Docker free space" "$MIN_DOCKER_FREE_GIB"
 validate_model_value "GPU name substring" "$REQUIRED_GPU_NAME"
 
-if [[ "$MODEL_WAS_SET" == "true" && "$MODEL_ID" != "$DEFAULT_MODEL_ID" ]]; then
+if [[ "$MODEL_WAS_SET" == "true" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
   [[ "$REVISION_WAS_SET" == "true" ]] ||
     die "A custom model requires --model-revision so deployments remain reproducible."
   MODEL_PROFILE="custom"
@@ -220,6 +268,10 @@ case "$RUNTIME" in
     ;;
 esac
 
+if [[ "$MODEL_PROFILE" == "glm-5.2-w4a16-a100" && "$RUNTIME" != "vllm" ]]; then
+  die "The GLM-5.2 A100 W4A16 profile is verified only with vLLM. Use --runtime vllm or select a custom model."
+fi
+
 if [[ "$MTP_ENABLED" == "true" && ! ( "$RUNTIME" == "sglang" && "$MODEL_PROFILE" == "glm-5.2-w4afp8" ) ]]; then
   die "--enable-mtp is currently supported only by the default GLM-5.2 SGLang profile."
 fi
@@ -240,6 +292,7 @@ fi
 
 model_cache_dir="$DATA_DIR/huggingface/${MODEL_ID//\//--}/$MODEL_REVISION"
 
+log "Selected profile ${PROFILE}: ${RUNTIME}, ${MODEL_ID}@${MODEL_REVISION}, ${REQUIRED_GPU_COUNT}x ${REQUIRED_GPU_NAME}, ${CONTEXT_LENGTH}-token context."
 log "Running preflight checks. No NVIDIA driver will be installed or changed."
 run_preflight "$DATA_DIR" "$LISTEN_ADDRESS" "$PORT" "$CONTEXT_LENGTH" "$model_cache_dir"
 
@@ -405,6 +458,7 @@ chmod 0600 /etc/opsrabbit-llm/curl.conf
   printf 'MODEL_CACHE_DIR=%q\n' "$model_cache_dir"
   printf 'CONTEXT_LENGTH=%q\n' "$CONTEXT_LENGTH"
   printf 'MTP_ENABLED=%q\n' "$MTP_ENABLED"
+  printf 'PROFILE=%q\n' "$PROFILE"
   printf 'RUNTIME=%q\n' "$RUNTIME"
   printf 'MODEL_PROFILE=%q\n' "$MODEL_PROFILE"
   printf 'GPU_COUNT=%q\n' "$REQUIRED_GPU_COUNT"
