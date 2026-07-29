@@ -43,6 +43,12 @@ make_gpu_csv() {
   done
 }
 
+validate_a100_gpu_fixture() {
+  REQUIRED_GPU_NAME="A100"
+  MIN_GPU_MEMORY_MIB=79000
+  validate_gpu_csv "$(make_gpu_csv 8 'NVIDIA A100-SXM4-80GB' 81920)"
+}
+
 temporary_directory=$(mktemp -d)
 trap 'rm -rf -- "$temporary_directory"' EXIT
 
@@ -88,6 +94,7 @@ expect_success "eight H100 80 GB GPUs" validate_gpu_csv "$valid_gpus"
 expect_failure "seven GPUs" validate_gpu_csv "$seven_gpus"
 expect_failure "wrong GPU family" validate_gpu_csv "$wrong_gpu"
 expect_failure "insufficient GPU memory" validate_gpu_csv "$small_gpu"
+expect_success "eight A100 80 GB GPUs for A100 profile" validate_a100_gpu_fixture
 
 expect_success "current SGLang CUDA driver" validate_driver_version 580.82.07
 expect_failure "older SGLang CUDA driver" validate_driver_version 575.57.08
