@@ -37,7 +37,8 @@ arguments. This keeps model churn out of `install.sh` and `run-model.sh`.
 | `PROFILE_TRUST_REMOTE_CODE` | Whether the built-in checkpoint needs repository code |
 | `PROFILE_REQUIRES_CUSTOM_MODEL` | Require the operator to provide model ID and revision |
 | `PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE` | Retain parsers when using a compatible mirror/quant |
-| `PROFILE_GGUF_FILENAME` | Exact root-level GGUF file downloaded for llama.cpp |
+| `PROFILE_GGUF_FILENAME` | Exact root-level GGUF file downloaded for llama.cpp; retained for simple single-file models |
+| `PROFILE_GGUF_FILES` | Ordered GGUF file paths for sharded models; the first shard is passed to llama.cpp |
 | `PROFILE_MTP_MODE` | Optional supported speculative-decoding mode |
 | `PROFILE_SGLANG_ARGS` / `PROFILE_VLLM_ARGS` / `PROFILE_LLAMACPP_ARGS` | Model-specific server arguments |
 | `PROFILE_SGLANG_ENV` / `PROFILE_VLLM_ENV` / `PROFILE_LLAMACPP_ENV` | Model-specific `NAME=value` container settings |
@@ -56,5 +57,5 @@ revisions, or customer information in a profile.
   genuinely tied to a named family, as with the existing GLM H100/A100 paths.
 - Community quantizations need an explicit quality, reasoning, streaming, and
   tool-call validation before becoming a built-in default.
-- GGUF profiles pin one exact filename so installation does not download every
-  quantization in a repository.
+- GGUF profiles pin one exact file or an ordered shard list so installation
+  downloads only the selected quantization rather than the whole repository.

@@ -67,6 +67,31 @@ expect_failure_contains \
   ./install.sh --data-dir / --profile qwen38-unsloth-gguf-q4 --check-only
 
 expect_failure_contains \
+  "DeepSeek V4 Flash 0731 native profile" \
+  "Selected profile deepseek-v4-flash-0731: sglang, deepseek-ai/DeepSeek-V4-Flash-0731@7872f01b1d1fe23eabc4c98b48bffcef5a386062, 4x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile deepseek-v4-flash-0731 --check-only
+
+expect_failure_contains \
+  "DeepSeek V4 Flash 0731 supports vLLM" \
+  "Selected profile deepseek-v4-flash-0731: vllm, deepseek-ai/DeepSeek-V4-Flash-0731@7872f01b1d1fe23eabc4c98b48bffcef5a386062, 4x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile deepseek-v4-flash-0731 --runtime vllm --check-only
+
+expect_failure_contains \
+  "DeepSeek V4 Flash 0423 H100 profile" \
+  "Selected profile deepseek-v4-flash-0423: sglang, deepseek-ai/DeepSeek-V4-Flash@60d8d70770c6776ff598c94bb586a859a38244f1, 8x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile deepseek-v4-flash-0423 --check-only
+
+expect_failure_contains \
+  "DeepSeek V4 Flash 0731 Unsloth Q4 GGUF profile" \
+  "Selected profile deepseek-v4-flash-0731-unsloth-gguf-q4: llamacpp, unsloth/DeepSeek-V4-Flash-0731-GGUF@fbbb5b93fb787c21338159b0af3318bb3f4d9768, 1x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile deepseek-v4-flash-0731-unsloth-gguf-q4 --check-only
+
+expect_failure_contains \
+  "DeepSeek GGUF rejects an incompatible runtime" \
+  "Profile deepseek-v4-flash-0731-unsloth-gguf-q4 supports runtime(s) llamacpp" \
+  ./install.sh --data-dir / --profile deepseek-v4-flash-0731-unsloth-gguf-q4 --runtime vllm --check-only
+
+expect_failure_contains \
   "GGUF profile rejects an incompatible runtime" \
   "Profile qwen38-unsloth-gguf-q4 supports runtime(s) llamacpp" \
   ./install.sh --data-dir / --profile qwen38-unsloth-gguf-q4 --runtime vllm --check-only

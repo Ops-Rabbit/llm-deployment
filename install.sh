@@ -49,7 +49,8 @@ MIN_SYSTEM_MEMORY_MIB=$PROFILE_MIN_SYSTEM_MEMORY_MIB
 MIN_DATA_GIB=$PROFILE_MIN_DATA_GIB
 CONTEXT_LENGTH=$PROFILE_CONTEXT_LENGTH
 TRUST_REMOTE_CODE=$PROFILE_TRUST_REMOTE_CODE
-GGUF_FILENAME=$PROFILE_GGUF_FILENAME
+GGUF_FILES=("${PROFILE_GGUF_FILES[@]}")
+GGUF_FILENAME=${GGUF_FILES[0]-}
 MTP_MODE=$PROFILE_MTP_MODE
 
 usage() {
@@ -252,7 +253,7 @@ if [[ "$MODEL_WAS_SET" == "true" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
     SERVED_MODEL_NAME=${MODEL_ID##*/}
   fi
 fi
-if [[ -n "$GGUF_FILENAME" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
+if ((${#GGUF_FILES[@]})) && [[ "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
   die "A GGUF profile cannot override its model repository. Add a new profile with the pinned GGUF filename instead."
 fi
 validate_model_value "Served model name" "$SERVED_MODEL_NAME"
@@ -280,8 +281,8 @@ case "$RUNTIME" in
   llamacpp)
     RUNTIME_IMAGE_TAG=$LLAMACPP_IMAGE_TAG
     MIN_DRIVER_VERSION="570.26.00"
-    [[ -n "$GGUF_FILENAME" ]] ||
-      die "llamacpp requires a profile with a pinned GGUF filename."
+    ((${#GGUF_FILES[@]})) ||
+      die "llamacpp requires a profile with pinned GGUF files."
     ;;
 esac
 
@@ -456,13 +457,16 @@ fi
 
 log "Downloading the exact model revision into the persistent cache."
 if [[ "$RUNTIME" == "llamacpp" ]]; then
-  gguf_destination="$model_cache_dir/$GGUF_FILENAME"
-  gguf_partial="$gguf_destination.partial"
-  gguf_url="https://huggingface.co/${MODEL_ID}/resolve/${MODEL_REVISION}/${GGUF_FILENAME}?download=true"
-  if [[ ! -s "$gguf_destination" ]]; then
-    curl --fail --location --retry 5 --continue-at - --output "$gguf_partial" "$gguf_url"
-    mv -- "$gguf_partial" "$gguf_destination"
-  fi
+  for gguf_file in "${GGUF_FILES[@]}"; do
+    gguf_destination="$model_cache_dir/$gguf_file"
+    gguf_partial="$gguf_destination.partial"
+    gguf_url="https://huggingface.co/${MODEL_ID}/resolve/${MODEL_REVISION}/${gguf_file}?download=true"
+    install -d -m 0755 "$(dirname -- "$gguf_destination")"
+    if [[ ! -s "$gguf_destination" ]]; then
+      curl --fail --location --retry 5 --continue-at - --output "$gguf_partial" "$gguf_url"
+      mv -- "$gguf_partial" "$gguf_destination"
+    fi
+  done
 else
   docker run --rm \
     --network bridge \

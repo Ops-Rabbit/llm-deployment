@@ -31,6 +31,7 @@ reset_profile() {
   PROFILE_REQUIRES_CUSTOM_MODEL=false
   PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE=false
   PROFILE_GGUF_FILENAME=""
+  PROFILE_GGUF_FILES=()
   PROFILE_MTP_MODE=""
   PROFILE_SGLANG_ARGS=()
   PROFILE_SGLANG_ENV=()
@@ -88,10 +89,25 @@ load_profile() {
     validate_model_revision "$PROFILE_MODEL_REVISION"
     validate_model_value "Profile served model name" "$PROFILE_SERVED_MODEL_NAME"
   fi
-  if [[ -n "$PROFILE_GGUF_FILENAME" ]]; then
-    [[ "$PROFILE_GGUF_FILENAME" =~ ^[A-Za-z0-9._-]+\.gguf$ ]] ||
-      die "Profile ${profile_name} contains an unsafe GGUF filename."
+  if [[ -n "$PROFILE_GGUF_FILENAME" && ${#PROFILE_GGUF_FILES[@]} -gt 0 ]]; then
+    die "Profile ${profile_name} must use either PROFILE_GGUF_FILENAME or PROFILE_GGUF_FILES, not both."
   fi
+  if [[ -n "$PROFILE_GGUF_FILENAME" ]]; then
+    PROFILE_GGUF_FILES=("$PROFILE_GGUF_FILENAME")
+  fi
+  local gguf_file
+  for gguf_file in "${PROFILE_GGUF_FILES[@]}"; do
+    validate_gguf_path "$profile_name" "$gguf_file"
+  done
+}
+
+validate_gguf_path() {
+  local profile_name=$1
+  local gguf_path=$2
+  [[ "$gguf_path" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.gguf$ ]] ||
+    die "Profile ${profile_name} contains an unsafe GGUF path."
+  [[ "/$gguf_path/" != *"/../"* && "/$gguf_path/" != *"/./"* ]] ||
+    die "Profile ${profile_name} contains an unsafe GGUF path."
 }
 
 runtime_is_allowed() {
