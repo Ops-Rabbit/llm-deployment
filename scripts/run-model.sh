@@ -17,6 +17,8 @@ docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 runtime_args=()
 runtime_environment_args=()
+profile_runtime_args=()
+profile_runtime_environment=()
 if [[ -r "$RUNTIME_ARGS_FILE" ]]; then
   while IFS= read -r runtime_arg || [[ -n "$runtime_arg" ]]; do
     [[ -z "$runtime_arg" || "$runtime_arg" == \#* ]] && continue
@@ -37,32 +39,18 @@ case "$RUNTIME" in
       --port "$INTERNAL_PORT"
       --tp-size "$GPU_COUNT"
       --context-length "$CONTEXT_LENGTH"
-      --mem-fraction-static 0.85
+      --mem-fraction-static "$SGLANG_MEM_FRACTION"
       --sampling-defaults model
       --log-level warning
       --config /run/secrets/sglang-auth.json
     )
-    if [[ "$MODEL_PROFILE" == "glm-5.2-w4afp8" ]]; then
-      server_args+=(
-        --quantization w4afp8
-        --reasoning-parser glm45
-        --tool-call-parser glm47
-        --disable-shared-experts-fusion
-      )
-    fi
+    profile_runtime_args=("${PROFILE_SGLANG_ARGS[@]}")
+    profile_runtime_environment=("${PROFILE_SGLANG_ENV[@]}")
     ;;
   vllm)
     rm -f "$BACKEND_SOCKET"
     docker_entrypoint_args=(--entrypoint bash)
     network_args=(--network none)
-    vllm_gpu_memory_utilization=0.85
-    if [[ "$MODEL_PROFILE" == "glm-5.2-w4a16-a100" ]]; then
-      vllm_gpu_memory_utilization=0.92
-      runtime_environment_args+=(
-        --env VLLM_USE_FLASHINFER_SAMPLER=0
-        --env VLLM_USE_DEEP_GEMM=0
-      )
-    fi
     server_args=(
       -c 'umask 007; exec python3 "$@"' opsrabbit-vllm
       -m vllm.entrypoints.openai.api_server
@@ -72,16 +60,26 @@ case "$RUNTIME" in
       --uds "$BACKEND_SOCKET"
       --tensor-parallel-size "$GPU_COUNT"
       --max-model-len "$CONTEXT_LENGTH"
-      --gpu-memory-utilization "$vllm_gpu_memory_utilization"
+      --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
     )
-    if [[ "$MODEL_PROFILE" == "glm-5.2-w4a16-a100" ]]; then
-      server_args+=(
-        --dtype bfloat16
-        --reasoning-parser glm45
-        --tool-call-parser glm47
-        --enable-auto-tool-choice
-      )
-    fi
+    profile_runtime_args=("${PROFILE_VLLM_ARGS[@]}")
+    profile_runtime_environment=("${PROFILE_VLLM_ENV[@]}")
+    ;;
+  llamacpp)
+    rm -f "$BACKEND_SOCKET"
+    docker_entrypoint_args=(--entrypoint sh)
+    network_args=(--network none)
+    server_args=(
+      -c 'umask 007; exec /app/llama-server "$@"' opsrabbit-llamacpp
+      --model "/models/$GGUF_FILENAME"
+      --alias "$SERVED_MODEL_NAME"
+      --host "$BACKEND_SOCKET"
+      --ctx-size "$CONTEXT_LENGTH"
+      --n-gpu-layers auto
+      --api-key-file /run/secrets/api-key
+    )
+    profile_runtime_args=("${PROFILE_LLAMACPP_ARGS[@]}")
+    profile_runtime_environment=("${PROFILE_LLAMACPP_ENV[@]}")
     ;;
   *)
     printf 'Unsupported runtime in %s: %s\n' "$CONFIG_FILE" "$RUNTIME" >&2
@@ -89,11 +87,11 @@ case "$RUNTIME" in
     ;;
 esac
 
-if [[ "$TRUST_REMOTE_CODE" == "true" ]]; then
+if [[ "$TRUST_REMOTE_CODE" == "true" && "$RUNTIME" != "llamacpp" ]]; then
   server_args+=(--trust-remote-code)
 fi
 
-if [[ "$MTP_ENABLED" == "true" ]]; then
+if [[ "$MTP_ENABLED" == "true" && "$MTP_MODE" == "sglang-eagle" ]]; then
   server_args+=(
     --speculative-algorithm EAGLE
     --speculative-num-steps 1
@@ -102,16 +100,30 @@ if [[ "$MTP_ENABLED" == "true" ]]; then
   )
 fi
 
-server_args+=("${runtime_args[@]}")
+server_args+=("${profile_runtime_args[@]}" "${runtime_args[@]}")
+
+for runtime_environment in "${profile_runtime_environment[@]}"; do
+  runtime_environment_args+=(--env "$runtime_environment")
+done
 
 runtime_secret_args=()
 if [[ "$RUNTIME" == "sglang" ]]; then
   runtime_secret_args+=(--volume /etc/opsrabbit-llm/sglang-auth.json:/run/secrets/sglang-auth.json:ro)
-else
+elif [[ "$RUNTIME" == "vllm" ]]; then
   runtime_secret_args+=(
     --env-file /etc/opsrabbit-llm/vllm.env
     --volume /run/opsrabbit-llm:/run/opsrabbit-llm
   )
+else
+  runtime_secret_args+=(
+    --volume /etc/opsrabbit-llm/api-key:/run/secrets/api-key:ro
+    --volume /run/opsrabbit-llm:/run/opsrabbit-llm
+  )
+fi
+
+model_volume_args=(--volume "$MODEL_CACHE_DIR:/root/.cache/huggingface")
+if [[ "$RUNTIME" == "llamacpp" ]]; then
+  model_volume_args=(--volume "$MODEL_CACHE_DIR:/models:ro")
 fi
 
 exec docker run --rm \
@@ -128,7 +140,7 @@ exec docker run --rm \
   --env HF_HUB_OFFLINE=1 \
   --env TRANSFORMERS_OFFLINE=1 \
   "${runtime_environment_args[@]}" \
-  --volume "$MODEL_CACHE_DIR:/root/.cache/huggingface" \
+  "${model_volume_args[@]}" \
   --volume "$DATA_DIR/torch:/root/.cache/torch" \
   --volume "$DATA_DIR/sglang:/root/.cache/sglang" \
   "${runtime_secret_args[@]}" \

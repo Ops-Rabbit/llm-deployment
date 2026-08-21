@@ -1,26 +1,22 @@
 #!/usr/bin/env bash
 
-DEFAULT_MODEL_ID="PhalaCloud/GLM-5.2-W4AFP8"
-DEFAULT_MODEL_REVISION="e42e1aee344f812b6fb73f503bfbe6a227727396"
-DEFAULT_SERVED_MODEL_NAME="glm-5.2-w4afp8"
-A100_MODEL_ID="lowbitcoffee/GLM-5.2-W4A16"
-A100_MODEL_REVISION="55c92ae85b7ec564c94634964b6f5efe5c09a844"
-A100_SERVED_MODEL_NAME="glm-5.2-w4a16"
-A100_CONTEXT_LENGTH=32768
 SGLANG_IMAGE_TAG="lmsysorg/sglang:latest"
 VLLM_IMAGE_TAG="vllm/vllm-openai:latest"
+LLAMACPP_IMAGE_TAG="ghcr.io/ggml-org/llama.cpp:server-cuda"
 NVIDIA_TOOLKIT_VERSION="1.19.1-1"
 MIN_DATA_GIB=600
 MIN_DOCKER_FREE_GIB=80
 REQUIRED_GPU_COUNT=8
 MIN_GPU_MEMORY_MIB=79000
 REQUIRED_GPU_NAME="H100"
+MIN_COMPUTE_CAPABILITY=""
+MIN_SYSTEM_MEMORY_MIB=0
 MIN_DRIVER_VERSION="580.82.07"
 DEFAULT_CONTEXT_LENGTH=131072
 DEFAULT_LISTEN_ADDRESS="127.0.0.1"
 DEFAULT_PORT=8000
 INTERNAL_PORT=30000
-BACKEND_SOCKET="/run/opsrabbit-llm/vllm.sock"
+BACKEND_SOCKET="/run/opsrabbit-llm/backend.sock"
 
 log() {
   printf '[opsrabbit-llm] %s\n' "$*"
@@ -89,8 +85,8 @@ validate_context_length() {
 
 validate_runtime() {
   local runtime=$1
-  [[ "$runtime" == "sglang" || "$runtime" == "vllm" ]] ||
-    die "Runtime must be sglang or vllm; received ${runtime}."
+  [[ "$runtime" == "sglang" || "$runtime" == "vllm" || "$runtime" == "llamacpp" ]] ||
+    die "Runtime must be sglang, vllm, or llamacpp; received ${runtime}."
 }
 
 validate_model_value() {
@@ -138,7 +134,8 @@ validate_runtime_args_file() {
     --api-key --admin-api-key --host --port --model --model-path --revision --served-model-name
     --tensor-parallel-size --tp --tp-size --context-length --max-model-len
     --mem-fraction-static --gpu-memory-utilization --trust-remote-code --log-level
-    --config --uds
+    --config --uds --api-key-file --alias --ctx-size --gpu-layers --n-gpu-layers
+    --tensor-split
   )
   while IFS= read -r runtime_arg || [[ -n "$runtime_arg" ]]; do
     [[ -z "$runtime_arg" || "$runtime_arg" == \#* ]] && continue
@@ -164,6 +161,12 @@ validate_positive_integer() {
   local label=$1
   local value=$2
   [[ "$value" =~ ^[0-9]+$ ]] && ((value > 0)) || die "${label} must be a positive integer."
+}
+
+validate_nonnegative_integer() {
+  local label=$1
+  local value=$2
+  [[ "$value" =~ ^[0-9]+$ ]] || die "${label} must be a non-negative integer."
 }
 
 validate_access_value() {
@@ -194,7 +197,7 @@ validate_data_directory() {
     protected_path=$(dirname -- "$protected_path")
   done
 
-  for protected_path in "$data_dir/huggingface" "$data_dir/torch" "$data_dir/sglang"; do
+  for protected_path in "$data_dir/huggingface" "$data_dir/torch" "$data_dir/sglang" "$data_dir/llamacpp"; do
     [[ -e "$protected_path" || -L "$protected_path" ]] || continue
     [[ ! -L "$protected_path" ]] || die "Data path cannot be a symbolic link: ${protected_path}."
     [[ -d "$protected_path" ]] || die "Data path must be a directory: ${protected_path}."
@@ -250,8 +253,10 @@ validate_gpu_csv() {
     name=${name%"${name##*[![:space:]]}"}
     memory=${memory//[[:space:]]/}
     ((count += 1))
-    [[ "$name" == *"$REQUIRED_GPU_NAME"* ]] ||
-      die "GPU ${count} is ${name}; its name must contain ${REQUIRED_GPU_NAME}."
+    if [[ -n "$REQUIRED_GPU_NAME" ]]; then
+      [[ "$name" == *"$REQUIRED_GPU_NAME"* ]] ||
+        die "GPU ${count} is ${name}; its name must contain ${REQUIRED_GPU_NAME}."
+    fi
     [[ "$memory" =~ ^[0-9]+$ ]] || die "Could not read memory for GPU ${count}."
     ((memory >= MIN_GPU_MEMORY_MIB)) ||
       die "GPU ${count} has ${memory} MiB; at least ${MIN_GPU_MEMORY_MIB} MiB is required."
@@ -261,6 +266,45 @@ validate_gpu_csv() {
     die "Exactly ${REQUIRED_GPU_COUNT} matching GPUs are required; found ${count}."
 }
 
+validate_compute_capability_csv() {
+  local capability_csv=$1
+  local minimum=$2
+  local count=0 capability
+  local minimum_major minimum_minor capability_major capability_minor
+
+  [[ "$minimum" =~ ^[0-9]+\.[0-9]+$ ]] ||
+    die "Invalid minimum GPU compute capability: ${minimum}."
+  IFS='.' read -r minimum_major minimum_minor <<<"$minimum"
+
+  while IFS= read -r capability; do
+    capability=${capability//[[:space:]]/}
+    [[ -n "$capability" ]] || continue
+    ((count += 1))
+    [[ "$capability" =~ ^[0-9]+\.[0-9]+$ ]] ||
+      die "Could not read compute capability for GPU ${count}."
+    IFS='.' read -r capability_major capability_minor <<<"$capability"
+    ((10#$capability_major > 10#$minimum_major ||
+      (10#$capability_major == 10#$minimum_major && 10#$capability_minor >= 10#$minimum_minor))) ||
+      die "GPU ${count} has compute capability ${capability}; ${minimum} or newer is required."
+  done <<<"$capability_csv"
+
+  ((count == REQUIRED_GPU_COUNT)) ||
+    die "Could not verify compute capability for all ${REQUIRED_GPU_COUNT} GPUs."
+}
+
+validate_system_memory() {
+  local minimum_mib=$1
+  local meminfo_file=${2:-/proc/meminfo}
+  ((minimum_mib == 0)) && return 0
+  [[ -r "$meminfo_file" ]] || die "Cannot read system memory information from ${meminfo_file}."
+
+  local total_kib
+  total_kib=$(awk '/^MemTotal:/ {print $2; exit}' "$meminfo_file")
+  [[ "$total_kib" =~ ^[0-9]+$ ]] || die "Could not determine total system memory."
+  ((total_kib >= minimum_mib * 1024)) ||
+    die "At least ${minimum_mib} MiB of system memory is required; found $((total_kib / 1024)) MiB."
+}
+
 validate_gpu_profile() {
   command_exists nvidia-smi || die "nvidia-smi is missing. Install a working NVIDIA driver before running this installer."
 
@@ -268,6 +312,13 @@ validate_gpu_profile() {
   gpu_csv=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits) ||
     die "nvidia-smi failed. Fix the NVIDIA driver before continuing."
   validate_gpu_csv "$gpu_csv"
+
+  if [[ -n "$MIN_COMPUTE_CAPABILITY" ]]; then
+    local capability_csv
+    capability_csv=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits) ||
+      die "Could not read GPU compute capability."
+    validate_compute_capability_csv "$capability_csv" "$MIN_COMPUTE_CAPABILITY"
+  fi
 
   local driver_version
   driver_version=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 | tr -d '[:space:]') ||
@@ -320,6 +371,7 @@ run_preflight() {
   validate_ipv4_address "$listen_address"
   validate_port "$port"
   validate_context_length "$context_length"
+  validate_system_memory "$MIN_SYSTEM_MEMORY_MIB"
   validate_data_directory "$data_dir" "$model_cache_dir"
   validate_gpu_profile
 }

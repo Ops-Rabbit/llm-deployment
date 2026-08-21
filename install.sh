@@ -5,32 +5,52 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly SCRIPT_DIR
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/profiles.sh
+source "$SCRIPT_DIR/lib/profiles.sh"
 
 DATA_DIR=""
 PROFILE="h100"
-RUNTIME="sglang"
-MODEL_ID=$DEFAULT_MODEL_ID
-MODEL_REVISION=$DEFAULT_MODEL_REVISION
-SERVED_MODEL_NAME=$DEFAULT_SERVED_MODEL_NAME
-MODEL_PROFILE="glm-5.2-w4afp8"
-RUNTIME_WAS_SET=false
 MODEL_WAS_SET=false
 REVISION_WAS_SET=false
 SERVED_NAME_WAS_SET=false
-GPU_NAME_WAS_SET=false
-GPU_MEMORY_WAS_SET=false
-CONTEXT_LENGTH_WAS_SET=false
-TRUST_REMOTE_CODE=true
 TRUST_WAS_SET=false
 RUNTIME_ARGS_FILE=""
 LISTEN_ADDRESS=$DEFAULT_LISTEN_ADDRESS
 PORT=$DEFAULT_PORT
-CONTEXT_LENGTH=$DEFAULT_CONTEXT_LENGTH
 MTP_ENABLED=false
 CHECK_ONLY=false
 ACCESS_FILE=""
 STARTUP_TIMEOUT=14400
 ORIGINAL_ARGS=("$@")
+
+for ((argument_index = 0; argument_index < ${#ORIGINAL_ARGS[@]}; argument_index++)); do
+  if [[ "${ORIGINAL_ARGS[$argument_index]}" == "--list-profiles" ]]; then
+    list_profiles
+    exit 0
+  fi
+  if [[ "${ORIGINAL_ARGS[$argument_index]}" == "--profile" ]]; then
+    ((argument_index + 1 < ${#ORIGINAL_ARGS[@]})) || die "--profile requires a value."
+    PROFILE=${ORIGINAL_ARGS[$((argument_index + 1))]}
+  fi
+done
+
+load_profile "$PROFILE"
+RUNTIME=$PROFILE_DEFAULT_RUNTIME
+MODEL_ID=$PROFILE_MODEL_ID
+MODEL_REVISION=$PROFILE_MODEL_REVISION
+SERVED_MODEL_NAME=$PROFILE_SERVED_MODEL_NAME
+MODEL_FAMILY=$PROFILE_MODEL_FAMILY
+ALLOWED_RUNTIMES=$PROFILE_ALLOWED_RUNTIMES
+REQUIRED_GPU_COUNT=$PROFILE_GPU_COUNT
+REQUIRED_GPU_NAME=$PROFILE_GPU_NAME
+MIN_GPU_MEMORY_MIB=$PROFILE_MIN_GPU_MEMORY_MIB
+MIN_COMPUTE_CAPABILITY=$PROFILE_MIN_COMPUTE_CAPABILITY
+MIN_SYSTEM_MEMORY_MIB=$PROFILE_MIN_SYSTEM_MEMORY_MIB
+MIN_DATA_GIB=$PROFILE_MIN_DATA_GIB
+CONTEXT_LENGTH=$PROFILE_CONTEXT_LENGTH
+TRUST_REMOTE_CODE=$PROFILE_TRUST_REMOTE_CODE
+GGUF_FILENAME=$PROFILE_GGUF_FILENAME
+MTP_MODE=$PROFILE_MTP_MODE
 
 usage() {
   cat <<'EOF'
@@ -42,24 +62,26 @@ Usage:
   ./install.sh --data-dir PATH --check-only [options]
 
 Required:
-  --data-dir PATH           Existing mounted directory with at least 600 GiB free
+  --data-dir PATH           Existing mounted directory meeting the selected profile
 
 Options:
-  --profile NAME            h100 or a100 (default: h100)
-  --runtime NAME            sglang or vllm (default: sglang)
+  --profile NAME            Deployment profile (default: h100)
+  --list-profiles           Print available profiles and exit
+  --runtime NAME            sglang, vllm, or llamacpp
   --model ID                Hugging Face model ID
   --model-revision REV      Required pinned revision for a custom model
   --served-model-name NAME  Model name exposed by the API
   --runtime-args-file PATH  Extra runtime arguments, one argument per line
   --trust-remote-code       Allow custom model repository code
-  --gpu-count COUNT         Required GPU count (default: 8)
-  --gpu-name TEXT           Required GPU-name substring (default: H100)
-  --min-gpu-memory-mib MIB  Minimum memory per GPU (default: 79000)
-  --min-data-gib GIB        Free space plus existing cache (default: 600)
+  --gpu-count COUNT         Required GPU count (profile default when omitted)
+  --gpu-name TEXT           Optional required GPU-name substring
+  --min-gpu-memory-mib MIB  Minimum memory per GPU
+  --min-system-memory-mib N Minimum host memory in MiB
+  --min-data-gib GIB        Free space plus existing selected-model cache
   --min-docker-free-gib GIB Free space required in Docker data root (default: 80)
   --listen-address IPv4     API bind address (default: 127.0.0.1)
   --port PORT               API port (default: 8000)
-  --context-length TOKENS   Model context window (default: 131072)
+  --context-length TOKENS   Model context window (profile default when omitted)
   --api-key-file PATH       Read an existing API key from a file
   --enable-mtp              Enable experimental MTP speculative decoding
   --startup-timeout SEC     Wait up to this many seconds for readiness (default: 14400)
@@ -78,10 +100,12 @@ while (($#)); do
       PROFILE=$2
       shift 2
       ;;
+    --list-profiles)
+      shift
+      ;;
     --runtime)
       [[ $# -ge 2 ]] || die "--runtime requires a value."
       RUNTIME=$2
-      RUNTIME_WAS_SET=true
       shift 2
       ;;
     --model)
@@ -120,13 +144,16 @@ while (($#)); do
     --gpu-name)
       [[ $# -ge 2 ]] || die "--gpu-name requires a value."
       REQUIRED_GPU_NAME=$2
-      GPU_NAME_WAS_SET=true
       shift 2
       ;;
     --min-gpu-memory-mib)
       [[ $# -ge 2 ]] || die "--min-gpu-memory-mib requires a value."
       MIN_GPU_MEMORY_MIB=$2
-      GPU_MEMORY_WAS_SET=true
+      shift 2
+      ;;
+    --min-system-memory-mib)
+      [[ $# -ge 2 ]] || die "--min-system-memory-mib requires a value."
+      MIN_SYSTEM_MEMORY_MIB=$2
       shift 2
       ;;
     --min-data-gib)
@@ -157,7 +184,6 @@ while (($#)); do
     --context-length)
       [[ $# -ge 2 ]] || die "--context-length requires a value."
       CONTEXT_LENGTH=$2
-      CONTEXT_LENGTH_WAS_SET=true
       shift 2
       ;;
     --api-key-file)
@@ -189,55 +215,36 @@ while (($#)); do
 done
 
 [[ -n "$DATA_DIR" ]] || die "--data-dir is required."
-case "$PROFILE" in
-  h100)
-    PROFILE_MODEL_ID=$DEFAULT_MODEL_ID
-    ;;
-  a100)
-    PROFILE_MODEL_ID=$A100_MODEL_ID
-    MODEL_PROFILE="glm-5.2-w4a16-a100"
-    if [[ "$RUNTIME_WAS_SET" != "true" ]]; then
-      RUNTIME="vllm"
-    fi
-    if [[ "$MODEL_WAS_SET" != "true" ]]; then
-      MODEL_ID=$A100_MODEL_ID
-    fi
-    if [[ "$REVISION_WAS_SET" != "true" ]]; then
-      MODEL_REVISION=$A100_MODEL_REVISION
-    fi
-    if [[ "$SERVED_NAME_WAS_SET" != "true" ]]; then
-      SERVED_MODEL_NAME=$A100_SERVED_MODEL_NAME
-    fi
-    if [[ "$GPU_NAME_WAS_SET" != "true" ]]; then
-      REQUIRED_GPU_NAME="A100"
-    fi
-    if [[ "$GPU_MEMORY_WAS_SET" != "true" ]]; then
-      MIN_GPU_MEMORY_MIB=79000
-    fi
-    if [[ "$CONTEXT_LENGTH_WAS_SET" != "true" ]]; then
-      CONTEXT_LENGTH=$A100_CONTEXT_LENGTH
-    fi
-    ;;
-  *)
-    die "Profile must be h100 or a100; received ${PROFILE}."
-    ;;
-esac
 DATA_DIR=$(canonicalize_data_directory "$DATA_DIR")
 [[ "$STARTUP_TIMEOUT" =~ ^[0-9]+$ ]] || die "Startup timeout must be a non-negative number."
+if [[ "$PROFILE_REQUIRES_CUSTOM_MODEL" == "true" && "$MODEL_WAS_SET" != "true" ]]; then
+  die "Profile ${PROFILE} requires --model and --model-revision because no community INT4 checkpoint is trusted as a built-in default yet."
+fi
 validate_runtime "$RUNTIME"
 validate_model_value "Model" "$MODEL_ID"
 validate_huggingface_model_id "$MODEL_ID"
-validate_model_value "Served model name" "$SERVED_MODEL_NAME"
 validate_positive_integer "GPU count" "$REQUIRED_GPU_COUNT"
 validate_positive_integer "Minimum GPU memory" "$MIN_GPU_MEMORY_MIB"
+validate_nonnegative_integer "Minimum system memory" "$MIN_SYSTEM_MEMORY_MIB"
 validate_positive_integer "Minimum data size" "$MIN_DATA_GIB"
 validate_positive_integer "Minimum Docker free space" "$MIN_DOCKER_FREE_GIB"
-validate_model_value "GPU name substring" "$REQUIRED_GPU_NAME"
+if [[ -n "$REQUIRED_GPU_NAME" ]]; then
+  validate_model_value "GPU name substring" "$REQUIRED_GPU_NAME"
+fi
 
 if [[ "$MODEL_WAS_SET" == "true" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
   [[ "$REVISION_WAS_SET" == "true" ]] ||
     die "A custom model requires --model-revision so deployments remain reproducible."
-  MODEL_PROFILE="custom"
+  if [[ "$PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE" != "true" ]]; then
+    MODEL_FAMILY="custom"
+    ALLOWED_RUNTIMES="sglang vllm"
+    PROFILE_SGLANG_ARGS=()
+    PROFILE_SGLANG_ENV=()
+    PROFILE_VLLM_ARGS=()
+    PROFILE_VLLM_ENV=()
+    PROFILE_LLAMACPP_ARGS=()
+    PROFILE_LLAMACPP_ENV=()
+  fi
   if [[ "$TRUST_WAS_SET" != "true" ]]; then
     TRUST_REMOTE_CODE=false
   fi
@@ -245,6 +252,10 @@ if [[ "$MODEL_WAS_SET" == "true" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
     SERVED_MODEL_NAME=${MODEL_ID##*/}
   fi
 fi
+if [[ -n "$GGUF_FILENAME" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
+  die "A GGUF profile cannot override its model repository. Add a new profile with the pinned GGUF filename instead."
+fi
+validate_model_value "Served model name" "$SERVED_MODEL_NAME"
 validate_model_value "Model revision" "$MODEL_REVISION"
 validate_model_revision "$MODEL_REVISION"
 [[ "$SERVED_MODEL_NAME" =~ ^[A-Za-z0-9._-]+$ ]] ||
@@ -254,6 +265,9 @@ if [[ -n "$RUNTIME_ARGS_FILE" ]]; then
   validate_runtime_args_file "$RUNTIME_ARGS_FILE"
 fi
 
+runtime_is_allowed "$RUNTIME" "$ALLOWED_RUNTIMES" ||
+  die "Profile ${PROFILE} supports runtime(s) ${ALLOWED_RUNTIMES}; received ${RUNTIME}."
+
 case "$RUNTIME" in
   sglang)
     RUNTIME_IMAGE_TAG=$SGLANG_IMAGE_TAG
@@ -262,18 +276,17 @@ case "$RUNTIME" in
   vllm)
     RUNTIME_IMAGE_TAG=$VLLM_IMAGE_TAG
     MIN_DRIVER_VERSION="580.95.05"
-    if [[ "$MODEL_PROFILE" == "glm-5.2-w4afp8" ]]; then
-      die "The default GLM-5.2 W4AFP8 checkpoint is SGLang-specific and unverified in vLLM. Select a vLLM-compatible model with --model and --model-revision."
-    fi
+    ;;
+  llamacpp)
+    RUNTIME_IMAGE_TAG=$LLAMACPP_IMAGE_TAG
+    MIN_DRIVER_VERSION="570.26.00"
+    [[ -n "$GGUF_FILENAME" ]] ||
+      die "llamacpp requires a profile with a pinned GGUF filename."
     ;;
 esac
 
-if [[ "$MODEL_PROFILE" == "glm-5.2-w4a16-a100" && "$RUNTIME" != "vllm" ]]; then
-  die "The GLM-5.2 A100 W4A16 profile is verified only with vLLM. Use --runtime vllm or select a custom model."
-fi
-
-if [[ "$MTP_ENABLED" == "true" && ! ( "$RUNTIME" == "sglang" && "$MODEL_PROFILE" == "glm-5.2-w4afp8" ) ]]; then
-  die "--enable-mtp is currently supported only by the default GLM-5.2 SGLang profile."
+if [[ "$MTP_ENABLED" == "true" && "$MTP_MODE" != "sglang-eagle" ]]; then
+  die "--enable-mtp is not supported by profile ${PROFILE}."
 fi
 
 if [[ "$CHECK_ONLY" != "true" && "$EUID" -ne 0 ]]; then
@@ -292,7 +305,11 @@ fi
 
 model_cache_dir="$DATA_DIR/huggingface/${MODEL_ID//\//--}/$MODEL_REVISION"
 
-log "Selected profile ${PROFILE}: ${RUNTIME}, ${MODEL_ID}@${MODEL_REVISION}, ${REQUIRED_GPU_COUNT}x ${REQUIRED_GPU_NAME}, ${CONTEXT_LENGTH}-token context."
+gpu_description="NVIDIA GPU"
+if [[ -n "$REQUIRED_GPU_NAME" ]]; then
+  gpu_description=$REQUIRED_GPU_NAME
+fi
+log "Selected profile ${PROFILE}: ${RUNTIME}, ${MODEL_ID}@${MODEL_REVISION}, ${REQUIRED_GPU_COUNT}x ${gpu_description}, ${CONTEXT_LENGTH}-token context."
 log "Running preflight checks. No NVIDIA driver will be installed or changed."
 run_preflight "$DATA_DIR" "$LISTEN_ADDRESS" "$PORT" "$CONTEXT_LENGTH" "$model_cache_dir"
 
@@ -414,7 +431,7 @@ docker_root=$(docker info --format '{{.DockerRootDir}}')
 validate_docker_storage "$docker_root" "$MIN_DOCKER_FREE_GIB"
 
 log "Creating persistent model-cache directories."
-install -d -m 0755 "$DATA_DIR/huggingface" "$DATA_DIR/torch" "$DATA_DIR/sglang"
+install -d -m 0755 "$DATA_DIR/huggingface" "$DATA_DIR/torch" "$DATA_DIR/sglang" "$DATA_DIR/llamacpp"
 install -d -m 0755 "$model_cache_dir"
 install -d -m 0755 /etc/opsrabbit-llm
 install -d -m 0755 /usr/local/lib/opsrabbit-llm /usr/local/sbin
@@ -425,21 +442,37 @@ docker pull "$RUNTIME_IMAGE_TAG"
 RUNTIME_IMAGE=$(docker image inspect --format '{{index .RepoDigests 0}}' "$RUNTIME_IMAGE_TAG")
 [[ "$RUNTIME_IMAGE" == *@sha256:* ]] || die "Could not resolve ${RUNTIME_IMAGE_TAG} to an immutable image digest."
 
-log "Verifying that containers can access all ${REQUIRED_GPU_COUNT} GPUs."
-docker run --rm --gpus all --entrypoint python3 "$RUNTIME_IMAGE" \
-  -c 'import sys, torch; expected=int(sys.argv[1]); assert torch.cuda.device_count() == expected, f"expected {expected} GPUs, found {torch.cuda.device_count()}"; [torch.ones(1, device=f"cuda:{index}").add_(1).cpu() for index in range(expected)]; [torch.cuda.synchronize(index) for index in range(expected)]' \
-  "$REQUIRED_GPU_COUNT" ||
-  die "The latest runtime could not execute a CUDA operation on every GPU. A newer NVIDIA driver or a different runtime may be required."
+log "Verifying that the latest runtime can access the selected GPU configuration."
+if [[ "$RUNTIME" == "llamacpp" ]]; then
+  docker run --rm --gpus all "$RUNTIME_IMAGE" --list-devices 2>&1 |
+    grep -Fq 'CUDA' ||
+    die "The latest llama.cpp runtime could not detect a CUDA device. A newer NVIDIA driver or a different runtime may be required."
+else
+  docker run --rm --gpus all --entrypoint python3 "$RUNTIME_IMAGE" \
+    -c 'import sys, torch; expected=int(sys.argv[1]); assert torch.cuda.device_count() == expected, f"expected {expected} GPUs, found {torch.cuda.device_count()}"; [torch.ones(1, device=f"cuda:{index}").add_(1).cpu() for index in range(expected)]; [torch.cuda.synchronize(index) for index in range(expected)]' \
+    "$REQUIRED_GPU_COUNT" ||
+    die "The latest runtime could not execute a CUDA operation on every GPU. A newer NVIDIA driver or a different runtime may be required."
+fi
 
 log "Downloading the exact model revision into the persistent cache."
-docker run --rm \
-  --network bridge \
-  --entrypoint python3 \
-  --env HF_HUB_DISABLE_TELEMETRY=1 \
-  --volume "$model_cache_dir:/root/.cache/huggingface" \
-  "$RUNTIME_IMAGE" \
-  -c 'import sys; from huggingface_hub import snapshot_download; snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2])' \
-  "$MODEL_ID" "$MODEL_REVISION"
+if [[ "$RUNTIME" == "llamacpp" ]]; then
+  gguf_destination="$model_cache_dir/$GGUF_FILENAME"
+  gguf_partial="$gguf_destination.partial"
+  gguf_url="https://huggingface.co/${MODEL_ID}/resolve/${MODEL_REVISION}/${GGUF_FILENAME}?download=true"
+  if [[ ! -s "$gguf_destination" ]]; then
+    curl --fail --location --retry 5 --continue-at - --output "$gguf_partial" "$gguf_url"
+    mv -- "$gguf_partial" "$gguf_destination"
+  fi
+else
+  docker run --rm \
+    --network bridge \
+    --entrypoint python3 \
+    --env HF_HUB_DISABLE_TELEMETRY=1 \
+    --volume "$model_cache_dir:/root/.cache/huggingface" \
+    "$RUNTIME_IMAGE" \
+    -c 'import sys; from huggingface_hub import snapshot_download; snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2])' \
+    "$MODEL_ID" "$MODEL_REVISION"
+fi
 
 printf '%s\n' "$ACCESS_VALUE" >/etc/opsrabbit-llm/api-key
 chmod 0600 /etc/opsrabbit-llm/api-key
@@ -458,9 +491,10 @@ chmod 0600 /etc/opsrabbit-llm/curl.conf
   printf 'MODEL_CACHE_DIR=%q\n' "$model_cache_dir"
   printf 'CONTEXT_LENGTH=%q\n' "$CONTEXT_LENGTH"
   printf 'MTP_ENABLED=%q\n' "$MTP_ENABLED"
+  printf 'MTP_MODE=%q\n' "$MTP_MODE"
   printf 'PROFILE=%q\n' "$PROFILE"
   printf 'RUNTIME=%q\n' "$RUNTIME"
-  printf 'MODEL_PROFILE=%q\n' "$MODEL_PROFILE"
+  printf 'MODEL_FAMILY=%q\n' "$MODEL_FAMILY"
   printf 'GPU_COUNT=%q\n' "$REQUIRED_GPU_COUNT"
   printf 'TRUST_REMOTE_CODE=%q\n' "$TRUST_REMOTE_CODE"
   printf 'LISTEN_ADDRESS=%q\n' "$LISTEN_ADDRESS"
@@ -468,9 +502,13 @@ chmod 0600 /etc/opsrabbit-llm/curl.conf
   printf 'MODEL_ID=%q\n' "$MODEL_ID"
   printf 'MODEL_REVISION=%q\n' "$MODEL_REVISION"
   printf 'SERVED_MODEL_NAME=%q\n' "$SERVED_MODEL_NAME"
+  printf 'GGUF_FILENAME=%q\n' "$GGUF_FILENAME"
+  printf 'SGLANG_MEM_FRACTION=%q\n' "$PROFILE_SGLANG_MEM_FRACTION"
+  printf 'GPU_MEMORY_UTILIZATION=%q\n' "$PROFILE_GPU_MEMORY_UTILIZATION"
   printf 'RUNTIME_IMAGE=%q\n' "$RUNTIME_IMAGE"
   printf 'INTERNAL_PORT=%q\n' "$INTERNAL_PORT"
   printf 'BACKEND_SOCKET=%q\n' "$BACKEND_SOCKET"
+  declare -p PROFILE_SGLANG_ARGS PROFILE_SGLANG_ENV PROFILE_VLLM_ARGS PROFILE_VLLM_ENV PROFILE_LLAMACPP_ARGS PROFILE_LLAMACPP_ENV
 } >/etc/opsrabbit-llm/install.conf
 chmod 0600 /etc/opsrabbit-llm/install.conf
 
@@ -516,7 +554,7 @@ if [[ "$LISTEN_ADDRESS" != "127.0.0.1" && "$LISTEN_ADDRESS" != "0.0.0.0" ]]; the
 fi
 
 backend_proxy="http://127.0.0.1:${INTERNAL_PORT}"
-if [[ "$RUNTIME" == "vllm" ]]; then
+if [[ "$RUNTIME" != "sglang" ]]; then
   backend_proxy="http://unix:${BACKEND_SOCKET}:"
 fi
 
@@ -572,7 +610,7 @@ systemctl enable opsrabbit-llm.service
 systemctl restart opsrabbit-llm.service
 
 if ((STARTUP_TIMEOUT > 0)); then
-  if [[ "$MODEL_PROFILE" == "glm-5.2-w4afp8" ]]; then
+  if [[ "$MODEL_FAMILY" == "glm-5.2-w4afp8" ]]; then
     log "Waiting for model readiness. The first run downloads roughly 440 GB and can take a long time."
   else
     log "Waiting for model readiness. A first run may need to download large model files."

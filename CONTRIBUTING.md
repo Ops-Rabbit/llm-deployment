@@ -11,6 +11,9 @@ Before opening a pull request:
    tags, so explain and test any runtime-image policy change.
 4. Run `./scripts/validate.sh` locally.
 5. Update the README when supported hardware, behavior, or security changes.
+6. Add new models through a declarative file under `profiles/` whenever the
+   selected runtime is already supported. Follow `profiles/README.md` and avoid
+   adding model-name conditionals to the installer or launcher.
 
 Changes that install drivers, format disks, open firewalls, or provision cloud
 resources require a separate design discussion and explicit approval.

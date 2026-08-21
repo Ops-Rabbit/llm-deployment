@@ -1,6 +1,7 @@
 # OpenAI-compatible LLM deployment
 
-Portable, inspectable installer for serving models through SGLang or vLLM.
+Portable, inspectable installer for serving models through SGLang, vLLM, or
+llama.cpp.
 The default profile serves the community
 [`PhalaCloud/GLM-5.2-W4AFP8`](https://huggingface.co/PhalaCloud/GLM-5.2-W4AFP8)
 checkpoint on a single 8× NVIDIA H100 80 GB host. It exposes an authenticated
@@ -15,16 +16,35 @@ drivers.
 
 ## Supported profiles
 
-| Component | `h100` (default) | `a100` |
-| --- | --- | --- |
-| Operating system | Ubuntu 24.04 LTS, x86_64 | Ubuntu 24.04 LTS, x86_64 |
-| GPUs | Exactly 8× H100 with at least 79,000 MiB each | Exactly 8× A100 with at least 79,000 MiB each |
-| Free model/cache storage | At least 600 GiB | At least 600 GiB |
-| Model | `PhalaCloud/GLM-5.2-W4AFP8` at a pinned revision | `lowbitcoffee/GLM-5.2-W4A16` at a pinned revision |
-| Inference runtime | Latest official SGLang image | Latest official vLLM image |
-| Default context length | 131,072 tokens | 32,768 tokens |
-| Compute path | W4AFP8 weights/activations; BF16 KV cache | INT4 weights; BF16 activations and KV cache |
-| API | Authenticated OpenAI-compatible `/v1` endpoint through nginx | Same |
+The overall default remains GLM-5.2. Qwen3.8 profiles are hardware-capability
+profiles: they check GPU count, memory, compute capability where required,
+system memory, disk, and runtime compatibility without requiring a particular
+GPU product name.
+
+| Profile | Checkpoint and format | Default runtime | Default hardware floor | Data space | Context | Position |
+| --- | --- | --- | --- | ---: | ---: | --- |
+| `h100` (default) | `PhalaCloud/GLM-5.2-W4AFP8` | SGLang | 8× H100 79,000 MiB | 600 GiB | 131,072 | Existing GLM H100 baseline |
+| `a100` | `lowbitcoffee/GLM-5.2-W4A16` | vLLM | 8× A100 79,000 MiB | 600 GiB | 32,768 | Existing GLM A100 baseline |
+| `qwen38-bf16` | Official Qwen3.8-27B BF16, 55.6 GB | SGLang; vLLM optional | 1× 79,000 MiB, compute 8.0+ | 100 GiB | 32,768 | Highest-fidelity Qwen baseline |
+| `qwen38-fp8` | Official Qwen3.8-27B FP8, 30.9 GB | SGLang; vLLM optional | 1× 45,000 MiB, compute 8.9+ | 75 GiB | 32,768 | Recommended Qwen cloud profile |
+| `qwen38-unsloth-nvfp4` | Unsloth NVFP4, about 23.4 GB with MTP | SGLang; vLLM optional | 1× 30,000 MiB, Blackwell compute 10.0+ | 60 GiB | 32,768 | Fast Blackwell profile |
+| `qwen38-unsloth-gguf-q2` | Unsloth Dynamic GGUF Q2 | llama.cpp | 1× 15,000 MiB plus host RAM | 40 GiB | 32,768 | Lowest-memory, reduced-quality testing |
+| `qwen38-unsloth-gguf-q3` | Unsloth Dynamic GGUF Q3 | llama.cpp | 1× 15,000 MiB plus host RAM | 40 GiB | 32,768 | Low-memory testing |
+| `qwen38-unsloth-gguf-q4` | Unsloth `UD-Q4_K_XL`, 17–19 GB | llama.cpp | 1× 23,000 MiB | 50 GiB | 32,768 | Recommended 24 GB GPU profile |
+| `qwen38-unsloth-gguf-q6` | Unsloth Dynamic GGUF Q6, about 24 GB | llama.cpp | 1× 30,000 MiB | 60 GiB | 32,768 | Higher-quality GGUF |
+| `qwen38-unsloth-gguf-q8` | Unsloth Dynamic GGUF Q8, about 31 GB | llama.cpp | 1× 45,000 MiB | 75 GiB | 32,768 | Highest-quality practical GGUF |
+| `qwen38-int4` | Operator-supplied pinned Qwen3.8 AWQ/GPTQ W4A16 | vLLM; SGLang optional | 1× 23,000 MiB, compute 7.5+ | 60 GiB | 32,768 | Format support pending a trusted built-in checkpoint |
+
+List the profiles present in the checked-out release:
+
+```bash
+./install.sh --list-profiles
+```
+
+Model revisions are pinned, while the official SGLang, vLLM, and llama.cpp
+runtime tags deliberately follow their newest published images. Each install
+resolves the selected runtime tag to an immutable digest before starting the
+service.
 
 The W4AFP8 checkpoint is a community quantization of GLM-5.2. It is not the
 full-precision or official FP8 checkpoint. The model card reports roughly 440
@@ -40,21 +60,34 @@ Hopper-only vLLM kernel paths, and enables GLM reasoning and tool-call parsing.
 The repository checks validate the generated configuration; full throughput
 and quality validation still requires a real A100 host.
 
-These are defaults, not hardcoded limits. A different model, GPU count, GPU
-name, per-GPU memory floor, storage allowance, context length, and runtime can
-be selected through installer options. The operator is responsible for making
-sure a custom combination fits in GPU memory and is supported by the selected
-runtime.
+These are conservative defaults, not a GPU product allowlist. GPU count,
+optional name matching, per-GPU memory floor, host-memory floor, storage,
+context length, and compatible runtime can be overridden. Multiple GPUs should
+be mutually compatible and have similar memory. The operator remains
+responsible for validating performance and quality after changing profile
+floors.
+
+The Qwen profiles configure Qwen reasoning and tool-call parsing for SGLang and
+vLLM. The GGUF profiles run llama.cpp with its embedded Jinja template,
+reasoning extraction, GPU offload, a protected Unix socket, and the same
+authenticated OpenAI-compatible API. GGUF vision projection is not installed
+in this initial text-and-tools deployment path.
+
+Checkpoint details and published sizes are available from the
+[official BF16 model](https://huggingface.co/Qwen/Qwen3.8-27B),
+[official FP8 model](https://huggingface.co/Qwen/Qwen3.8-27B-FP8), and
+[Unsloth Qwen3.8 guide](https://unsloth.ai/models/qwen3.8-27b).
 
 ## Before installation
 
 The host must already have:
 
 - Ubuntu 24.04 LTS on x86_64.
-- NVIDIA driver 580.82.07 or newer for the H100/SGLang profile, or 580.95.05 or
-  newer for the A100/vLLM profile. `nvidia-smi` must show exactly eight 80 GB
-  GPUs from the selected family.
-- An existing mounted data directory with at least 600 GiB free. The installer
+- A working NVIDIA driver. Current SGLang images require 580.82.07 or newer,
+  current vLLM images require 580.95.05 or newer, and the current CUDA 12
+  llama.cpp image requires 570.26.00 or newer. The installer also executes a
+  real CUDA visibility check inside the freshly pulled image.
+- An existing mounted data directory meeting the selected profile. The installer
   creates cache subdirectories but never formats, partitions, or mounts a disk.
   The directory and every ancestor must be canonical paths owned by root and
   not writable by group or other users; this prevents a local user from
@@ -81,6 +114,20 @@ For an A100 host, select its profile during preflight:
 ./install.sh --profile a100 --data-dir /mnt/llm-data --check-only
 ```
 
+For a 48 GB Ada/Hopper GPU, preflight the recommended official Qwen FP8
+profile:
+
+```bash
+./install.sh --profile qwen38-fp8 --data-dir /mnt/llm-data --check-only
+```
+
+For a 24 GB GPU, use the recommended Unsloth Q4 GGUF profile:
+
+```bash
+./install.sh --profile qwen38-unsloth-gguf-q4 \
+  --data-dir /mnt/llm-data --check-only
+```
+
 ## Install
 
 The safest default listens only on the machine itself:
@@ -94,6 +141,13 @@ pinned W4A16 checkpoint, vLLM, A100 hardware checks, and a 32,768-token context:
 
 ```bash
 sudo ./install.sh --profile a100 --data-dir /mnt/llm-data
+```
+
+Install Qwen3.8 FP8 or Unsloth Q4 GGUF in the same way:
+
+```bash
+sudo ./install.sh --profile qwen38-fp8 --data-dir /mnt/llm-data
+sudo ./install.sh --profile qwen38-unsloth-gguf-q4 --data-dir /mnt/llm-data
 ```
 
 To make the API available on a trusted local network, bind all IPv4 interfaces
@@ -130,7 +184,7 @@ for this exact GPU family and SGLang version shows corrupted output when FP8 KV
 is forced without scaling factors, while SGLang's automatic BF16 path produces
 correct output.
 
-## Other models and vLLM
+## Other models and runtimes
 
 Select a custom model with a pinned Hugging Face revision. The served name is
 derived from the model name unless it is set explicitly:
@@ -153,6 +207,20 @@ sudo ./install.sh \
   --model-revision <full-commit-sha> \
   --served-model-name <api-model-name>
 ```
+
+The Qwen BF16, FP8, and NVFP4 profiles accept either SGLang or vLLM. For
+example:
+
+```bash
+sudo ./install.sh --profile qwen38-fp8 --runtime vllm \
+  --data-dir /mnt/llm-data
+```
+
+Unsloth's BF16 and FP8 mirrors can reuse the corresponding Qwen behavior
+profile with an explicit pinned revision. They do not need duplicate installer
+logic. The INT4 profile deliberately requires `--model` and
+`--model-revision`; newly uploaded community quantizations are not silently
+promoted to trusted defaults.
 
 Custom model revisions must be full 40-character lowercase commit hashes so a
 rerun cannot silently download different code or weights. Mutable values such
@@ -217,7 +285,9 @@ sudo curl --fail \
 Use these client values:
 
 - Base URL: `http://<private-host>:8000/v1`
-- Model: `glm-5.2-w4afp8` for the H100 profile or `glm-5.2-w4a16` for A100
+- Model: the served name shown at the end of installation. It is
+  `glm-5.2-w4afp8` for H100, `glm-5.2-w4a16` for A100, and begins with
+  `qwen3.8-27b` for the built-in Qwen profiles.
 - API key: the value in `/etc/opsrabbit-llm/api-key`
 
 An illustrative OpsRabbit provider record is available at
@@ -254,7 +324,8 @@ sudo ./uninstall.sh
   readable only by root.
 - nginx exposes only `/health` and `/v1/*`. SGLang administrative endpoints
   remain blocked at the proxy and require a separate root-only backend
-  credential even from localhost.
+  credential even from localhost. vLLM and llama.cpp use protected Unix
+  sockets behind nginx.
 - SGLang informational argument logging is disabled because current releases
   include authentication fields in their startup argument dump. Warnings and
   errors remain available through the service journal.
@@ -262,9 +333,10 @@ sudo ./uninstall.sh
   TLS-terminating proxy in front of the endpoint.
 - Binding `0.0.0.0` does not create a firewall rule. Restrict port 8000 to the
   exact private network or clients that need it.
-- The built-in pinned model revisions are loaded with `--trust-remote-code`, so
-  review the selected repository before deployment and update pins deliberately.
-  Custom models require an explicit `--trust-remote-code` choice.
+- Profiles that enable `--trust-remote-code` are explicitly marked in their
+  catalog files. Review those pinned repositories before deployment and update
+  pins deliberately. Custom models require an explicit
+  `--trust-remote-code` choice.
 - Do not commit API keys, cloud credentials, SSH keys, or Hugging Face tokens.
 - Keep the model data directory root-owned and do not make its top-level cache
   directories writable by unprivileged users.
@@ -273,9 +345,12 @@ See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ## Reproducibility and updates
 
-The built-in model commits and minimum NVIDIA Container Toolkit package version
-are set in [`lib/common.sh`](lib/common.sh). Runtime tags intentionally track
-`lmsysorg/sglang:latest` and `vllm/vllm-openai:latest`. During installation,
+The built-in model commits and hardware requirements are stored in small files
+under [`profiles/`](profiles/README.md); shared runtime settings and the minimum
+NVIDIA Container Toolkit package version are in [`lib/common.sh`](lib/common.sh).
+Runtime tags intentionally track `lmsysorg/sglang:latest`,
+`vllm/vllm-openai:latest`, and the official llama.cpp `server-cuda` tag. During
+installation,
 the selected tag is pulled and resolved to the exact immutable digest stored in
 `/etc/opsrabbit-llm/install.conf`. The running service stays on that digest
 until the installer is rerun, when it deliberately refreshes to the newest
@@ -283,6 +358,14 @@ runtime.
 
 Pins are intentional. Test model or runtime upgrades on a disposable host and
 submit them through a pull request with updated evidence and validation.
+
+## Add a future model
+
+Adding a model does not require changing the installer or launcher when its
+runtime is already supported. Copy the closest file under `profiles/`, set the
+pinned model revision and capability requirements, add runtime arguments to
+the profile arrays, and run validation. The complete profile contract and
+review checklist are in [`profiles/README.md`](profiles/README.md).
 
 ## Local repository validation
 
@@ -299,5 +382,6 @@ future pull requests.
 ## License
 
 The scripts and documentation in this repository are licensed under the
-[Apache License 2.0](LICENSE). The GLM-5.2 model and third-party packages have
-their own licenses; review and accept those separately before deployment.
+[Apache License 2.0](LICENSE). GLM, Qwen, Unsloth checkpoints, and third-party
+packages have their own licenses and release-specific terms; review and accept
+those separately before deployment.
