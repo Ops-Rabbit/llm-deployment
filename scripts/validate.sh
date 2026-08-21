@@ -20,8 +20,12 @@ for shell_file in "${shell_files[@]}"; do
   bash -n "$shell_file"
 done
 bash -n ./lib/common.sh
+for profile_file in ./profiles/*.conf; do
+  bash -n "$profile_file"
+done
 
 ./tests/common_test.sh
+./tests/catalog_test.sh
 ./tests/profile_test.sh
 ./tests/repository_test.sh
 ./install.sh --help >/dev/null

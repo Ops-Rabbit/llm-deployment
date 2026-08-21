@@ -54,6 +54,8 @@ trap 'rm -rf -- "$temporary_directory"' EXIT
 
 printf 'ID=ubuntu\nVERSION_ID="24.04"\n' >"$temporary_directory/ubuntu-24.04"
 printf 'ID=ubuntu\nVERSION_ID="22.04"\n' >"$temporary_directory/ubuntu-22.04"
+printf 'MemTotal:       67108864 kB\n' >"$temporary_directory/meminfo-64g"
+printf 'MemTotal:       16777216 kB\n' >"$temporary_directory/meminfo-16g"
 mkdir "$temporary_directory/data-dir"
 ln -s "$temporary_directory/data-dir" "$temporary_directory/data-link"
 
@@ -95,6 +97,18 @@ expect_failure "seven GPUs" validate_gpu_csv "$seven_gpus"
 expect_failure "wrong GPU family" validate_gpu_csv "$wrong_gpu"
 expect_failure "insufficient GPU memory" validate_gpu_csv "$small_gpu"
 expect_success "eight A100 80 GB GPUs for A100 profile" validate_a100_gpu_fixture
+REQUIRED_GPU_COUNT=1
+REQUIRED_GPU_NAME=""
+MIN_GPU_MEMORY_MIB=23000
+expect_success "capability profile accepts any matching NVIDIA GPU name" validate_gpu_csv "NVIDIA L4, 23034"
+expect_success "minimum compute capability" validate_compute_capability_csv "8.9" "8.9"
+expect_success "newer compute capability" validate_compute_capability_csv "10.0" "8.9"
+expect_failure "older compute capability" validate_compute_capability_csv "8.6" "8.9"
+expect_success "sufficient system memory" validate_system_memory 32768 "$temporary_directory/meminfo-64g"
+expect_failure "insufficient system memory" validate_system_memory 32768 "$temporary_directory/meminfo-16g"
+REQUIRED_GPU_COUNT=8
+REQUIRED_GPU_NAME="H100"
+MIN_GPU_MEMORY_MIB=79000
 
 expect_success "current SGLang CUDA driver" validate_driver_version 580.82.07
 expect_failure "older SGLang CUDA driver" validate_driver_version 575.57.08
@@ -105,6 +119,7 @@ expect_failure "older NVIDIA driver" validate_driver_version 570.172.08
 expect_failure "malformed NVIDIA driver" validate_driver_version unknown
 expect_success "SGLang runtime" validate_runtime sglang
 expect_success "vLLM runtime" validate_runtime vllm
+expect_success "llama.cpp runtime" validate_runtime llamacpp
 expect_failure "unknown runtime" validate_runtime other
 expect_success "single-line model ID" validate_model_value Model org/model-name
 expect_failure "empty model ID" validate_model_value Model ''
