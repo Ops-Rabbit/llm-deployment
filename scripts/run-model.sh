@@ -42,7 +42,7 @@ case "$RUNTIME" in
       --mem-fraction-static "$SGLANG_MEM_FRACTION"
       --sampling-defaults model
       --log-level warning
-      --config /run/secrets/sglang-auth.json
+      --config /run/secrets/sglang-auth.yaml
     )
     profile_runtime_args=("${PROFILE_SGLANG_ARGS[@]}")
     profile_runtime_environment=("${PROFILE_SGLANG_ENV[@]}")
@@ -108,7 +108,7 @@ done
 
 runtime_secret_args=()
 if [[ "$RUNTIME" == "sglang" ]]; then
-  runtime_secret_args+=(--volume /etc/opsrabbit-llm/sglang-auth.json:/run/secrets/sglang-auth.json:ro)
+  runtime_secret_args+=(--volume /etc/opsrabbit-llm/sglang-auth.yaml:/run/secrets/sglang-auth.yaml:ro)
 elif [[ "$RUNTIME" == "vllm" ]]; then
   runtime_secret_args+=(
     --env-file /etc/opsrabbit-llm/vllm.env

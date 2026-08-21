@@ -30,7 +30,8 @@ assert_contains 'ghcr.io/ggml-org/llama.cpp:server-cuda' lib/common.sh
 assert_contains '--n-gpu-layers auto' scripts/run-model.sh
 assert_contains '--api-key-file /run/secrets/api-key' scripts/run-model.sh
 assert_contains 'umask 007; exec /app/llama-server' scripts/run-model.sh
-assert_contains '/run/secrets/sglang-auth.json' scripts/run-model.sh
+assert_contains '/run/secrets/sglang-auth.yaml' scripts/run-model.sh
+assert_contains 'rm -f /etc/opsrabbit-llm/sglang-auth.json' install.sh
 assert_contains '--log-level warning' scripts/run-model.sh
 assert_contains '--env-file /etc/opsrabbit-llm/vllm.env' scripts/run-model.sh
 assert_contains 'docker_entrypoint_args=(--entrypoint python3)' scripts/run-model.sh
