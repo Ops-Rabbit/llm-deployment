@@ -485,8 +485,9 @@ chmod 0600 /etc/opsrabbit-llm/admin-key
 printf 'VLLM_API_KEY=%s\n' "$ACCESS_VALUE" >/etc/opsrabbit-llm/vllm.env
 chmod 0600 /etc/opsrabbit-llm/vllm.env
 jq -n --arg access "$ACCESS_VALUE" --arg admin "$ADMIN_VALUE" \
-  '{"api-key": $access, "admin-api-key": $admin}' >/etc/opsrabbit-llm/sglang-auth.json
-chmod 0600 /etc/opsrabbit-llm/sglang-auth.json
+  '{"api-key": $access, "admin-api-key": $admin}' >/etc/opsrabbit-llm/sglang-auth.yaml
+chmod 0600 /etc/opsrabbit-llm/sglang-auth.yaml
+rm -f /etc/opsrabbit-llm/sglang-auth.json
 printf 'header = "Authorization: Bearer %s"\n' "$ACCESS_VALUE" >/etc/opsrabbit-llm/curl.conf
 chmod 0600 /etc/opsrabbit-llm/curl.conf
 
@@ -563,6 +564,9 @@ if [[ "$RUNTIME" != "sglang" ]]; then
 fi
 
 cat >/etc/nginx/conf.d/opsrabbit-llm.conf <<EOF
+# Accommodate the maximum supported 256-character bearer key.
+map_hash_bucket_size 512;
+
 map \$http_authorization \$opsrabbit_llm_authorized {
     default 0;
     "Bearer ${ACCESS_VALUE}" 1;

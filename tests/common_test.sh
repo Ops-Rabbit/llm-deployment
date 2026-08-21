@@ -87,6 +87,11 @@ expect_failure "zero context" validate_context_length 0
 expect_success "generated-style API key" validate_access_value 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 expect_failure "short API key" validate_access_value short
 expect_failure "unsafe API key characters" validate_access_value '01234567890123456789012345678901"bad'
+expect_success "root-owned read-only directory mode" directory_mode_is_protected 755
+expect_success "root-owned private directory mode" directory_mode_is_protected 700
+expect_failure "group-writable directory mode" directory_mode_is_protected 775
+expect_failure "other-writable directory mode" directory_mode_is_protected 757
+expect_failure "malformed directory mode" directory_mode_is_protected invalid
 
 valid_gpus=$(make_gpu_csv 8)
 seven_gpus=$(make_gpu_csv 7)

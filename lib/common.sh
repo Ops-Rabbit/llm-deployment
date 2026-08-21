@@ -177,6 +177,12 @@ validate_access_value() {
     die "API key must contain 32-256 URL-safe characters."
 }
 
+directory_mode_is_protected() {
+  local mode=$1
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (((8#$mode & 8#022) == 0))
+}
+
 validate_data_directory() {
   local data_dir=$1
   local model_cache_dir=${2:-}
@@ -192,7 +198,8 @@ validate_data_directory() {
     owner_uid=$(stat -c '%u' "$protected_path")
     mode=$(stat -c '%a' "$protected_path")
     [[ "$owner_uid" == "0" ]] || die "Every data path ancestor must be owned by root: ${protected_path}."
-    ((8#$mode & 8#022 == 0)) || die "Data path ancestors must not be writable by group or other users: ${protected_path}."
+    directory_mode_is_protected "$mode" ||
+      die "Data path ancestors must not be writable by group or other users: ${protected_path}."
     [[ "$protected_path" == "/" ]] && break
     protected_path=$(dirname -- "$protected_path")
   done
@@ -204,7 +211,8 @@ validate_data_directory() {
     owner_uid=$(stat -c '%u' "$protected_path")
     mode=$(stat -c '%a' "$protected_path")
     [[ "$owner_uid" == "0" ]] || die "Data path must be owned by root: ${protected_path}."
-    ((8#$mode & 8#022 == 0)) || die "Data path must not be writable by group or other users: ${protected_path}."
+    directory_mode_is_protected "$mode" ||
+      die "Data path must not be writable by group or other users: ${protected_path}."
   done
 
   local available_kib cache_kib=0 cache_path cache_path_kib
