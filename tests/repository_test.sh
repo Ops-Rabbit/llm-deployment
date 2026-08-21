@@ -50,6 +50,7 @@ assert_contains '--enable-auto-tool-choice' profiles/a100.conf
 assert_contains 'HF_HUB_OFFLINE=1' scripts/run-model.sh
 assert_not_contains '--kv-cache-dtype' scripts/run-model.sh
 assert_not_contains 'proxy_set_header Authorization ""' install.sh
+assert_contains 'map_hash_bucket_size 512;' install.sh
 assert_contains 'location = /health' install.sh
 assert_contains 'location ^~ /v1/' install.sh
 assert_contains 'location / {' install.sh

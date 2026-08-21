@@ -563,6 +563,9 @@ if [[ "$RUNTIME" != "sglang" ]]; then
 fi
 
 cat >/etc/nginx/conf.d/opsrabbit-llm.conf <<EOF
+# Accommodate the maximum supported 256-character bearer key.
+map_hash_bucket_size 512;
+
 map \$http_authorization \$opsrabbit_llm_authorized {
     default 0;
     "Bearer ${ACCESS_VALUE}" 1;
