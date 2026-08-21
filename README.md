@@ -1,14 +1,10 @@
 # OpenAI-compatible LLM deployment
 
 Portable, inspectable installer for serving models through SGLang, vLLM, or
-llama.cpp.
-The default profile serves the community
-[`PhalaCloud/GLM-5.2-W4AFP8`](https://huggingface.co/PhalaCloud/GLM-5.2-W4AFP8)
-checkpoint on a single 8× NVIDIA H100 80 GB host. It exposes an authenticated
-OpenAI-compatible API suitable for OpsRabbit and other compatible clients.
-An optional A100 profile serves the community
-[`lowbitcoffee/GLM-5.2-W4A16`](https://huggingface.co/lowbitcoffee/GLM-5.2-W4A16)
-checkpoint through vLLM on 8× NVIDIA A100 80 GB.
+llama.cpp. The operator explicitly selects a model profile, and the installer
+validates that machine against the profile's hardware and runtime requirements.
+It exposes an authenticated OpenAI-compatible API suitable for OpsRabbit and
+other compatible clients.
 
 This repository configures the machine only. It does **not** provision cloud
 resources, create firewall rules, format or mount disks, or install NVIDIA
@@ -16,15 +12,15 @@ drivers.
 
 ## Supported profiles
 
-The overall default remains GLM-5.2. Qwen3.8 and DeepSeek-V4-Flash profiles are
-hardware-capability profiles: they check GPU count, memory, compute capability
-where required, system memory, disk, and runtime compatibility without
-requiring a particular GPU product name.
+There is no implicit profile. Every installation must select one of the model
+profiles below. Profiles check GPU count, memory, compute capability where
+required, system memory, disk, and runtime compatibility. A profile requires a
+particular GPU product name only when its checkpoint is tied to that hardware.
 
 | Profile | Checkpoint and format | Default runtime | Default hardware floor | Data space | Context | Position |
 | --- | --- | --- | --- | ---: | ---: | --- |
-| `h100` (default) | `PhalaCloud/GLM-5.2-W4AFP8` | SGLang | 8× H100 79,000 MiB | 600 GiB | 131,072 | Existing GLM H100 baseline |
-| `a100` | `lowbitcoffee/GLM-5.2-W4A16` | vLLM | 8× A100 79,000 MiB | 600 GiB | 32,768 | Existing GLM A100 baseline |
+| `glm-5.2-w4afp8` | `PhalaCloud/GLM-5.2-W4AFP8` | SGLang | 8× H100 79,000 MiB | 600 GiB | 131,072 | Community GLM W4AFP8 baseline |
+| `glm-5.2-w4a16` | `lowbitcoffee/GLM-5.2-W4A16` | vLLM | 8× A100 79,000 MiB | 600 GiB | 32,768 | Community GLM W4A16 baseline |
 | `qwen38-bf16` | Official Qwen3.8-27B BF16, 55.6 GB | SGLang; vLLM optional | 1× 79,000 MiB, compute 8.0+ | 100 GiB | 32,768 | Highest-fidelity Qwen baseline |
 | `qwen38-fp8` | Official Qwen3.8-27B FP8, 30.9 GB | SGLang; vLLM optional | 1× 45,000 MiB, compute 8.9+ | 75 GiB | 32,768 | Recommended Qwen cloud profile |
 | `qwen38-unsloth-nvfp4` | Unsloth NVFP4, about 23.4 GB with MTP | SGLang; vLLM optional | 1× 30,000 MiB, Blackwell compute 10.0+ | 60 GiB | 32,768 | Fast Blackwell profile |
@@ -58,13 +54,13 @@ GB of files and about 410 GB of GPU memory for weights. The first installation
 can therefore take a long time while the exact revision is downloaded, and the
 first service start must then load those weights onto the GPUs.
 
-The A100 checkpoint is also a community quantization. Its model card reports a
-388 GB compressed-tensors checkpoint designed for vLLM, with INT4 weights and
-BF16 activations, and says it fits on one 8×A100 80 GB node. The A100 profile
-uses a smaller initial context window to preserve KV-cache headroom, disables
-Hopper-only vLLM kernel paths, and enables GLM reasoning and tool-call parsing.
-The repository checks validate the generated configuration; full throughput
-and quality validation still requires a real A100 host.
+The `glm-5.2-w4a16` checkpoint is also a community quantization. Its model card
+reports a 388 GB compressed-tensors checkpoint designed for vLLM, with INT4
+weights and BF16 activations, and says it fits on one 8×A100 80 GB node. Its
+profile uses a smaller initial context window to preserve KV-cache headroom,
+disables Hopper-only vLLM kernel paths, and enables GLM reasoning and tool-call
+parsing. The repository checks validate the generated configuration; full
+throughput and quality validation still requires matching hardware.
 
 These are conservative defaults, not a GPU product allowlist. GPU count,
 optional name matching, per-GPU memory floor, host-memory floor, storage,
@@ -132,13 +128,15 @@ preflight:
 ```bash
 sudo chown root:root /mnt/llm-data
 sudo chmod 0755 /mnt/llm-data
-./install.sh --data-dir /mnt/llm-data --check-only
+./install.sh --profile glm-5.2-w4afp8 \
+  --data-dir /mnt/llm-data --check-only
 ```
 
-For an A100 host, select its profile during preflight:
+For the GLM-5.2 W4A16 checkpoint, select its model profile during preflight:
 
 ```bash
-./install.sh --profile a100 --data-dir /mnt/llm-data --check-only
+./install.sh --profile glm-5.2-w4a16 \
+  --data-dir /mnt/llm-data --check-only
 ```
 
 For a 48 GB Ada/Hopper GPU, preflight the recommended official Qwen FP8
@@ -157,17 +155,19 @@ For a 24 GB GPU, use the recommended Unsloth Q4 GGUF profile:
 
 ## Install
 
-The safest default listens only on the machine itself:
+The selected model listens only on the machine itself unless a different
+listen address is explicitly supplied:
 
 ```bash
-sudo ./install.sh --data-dir /mnt/llm-data
+sudo ./install.sh --profile glm-5.2-w4afp8 --data-dir /mnt/llm-data
 ```
 
-On an 8×A100 80 GB host, select the A100 profile. It automatically chooses the
-pinned W4A16 checkpoint, vLLM, A100 hardware checks, and a 32,768-token context:
+To install the W4A16 checkpoint, select its model profile. It automatically
+chooses the pinned checkpoint, vLLM, matching hardware checks, and a
+32,768-token context:
 
 ```bash
-sudo ./install.sh --profile a100 --data-dir /mnt/llm-data
+sudo ./install.sh --profile glm-5.2-w4a16 --data-dir /mnt/llm-data
 ```
 
 Install Qwen3.8 FP8 or Unsloth Q4 GGUF in the same way:
@@ -195,6 +195,7 @@ and restrict the API port in the host or network firewall:
 
 ```bash
 sudo ./install.sh \
+  --profile qwen38-fp8 \
   --data-dir /mnt/llm-data \
   --listen-address 0.0.0.0 \
   --port 8000
@@ -209,14 +210,15 @@ key, put one URL-safe value of 32–256 characters in a protected file:
 
 ```bash
 sudo ./install.sh \
+  --profile qwen38-fp8 \
   --data-dir /mnt/llm-data \
   --api-key-file /secure/path/api-key
 ```
 
 Multi-token prediction (MTP) speculative decoding is deliberately disabled for
 the initial baseline. It can be enabled explicitly with `--enable-mtp` for the
-default H100/SGLang profile after the baseline deployment has been measured and
-verified. It is not enabled for the A100 profile.
+`glm-5.2-w4afp8` profile after the baseline deployment has been measured and
+verified. It is not enabled for `glm-5.2-w4a16`.
 
 The installer intentionally does not force FP8 KV cache on H100. An
 [upstream report](https://huggingface.co/PhalaCloud/GLM-5.2-W4AFP8/discussions/3)
@@ -231,16 +233,19 @@ derived from the model name unless it is set explicitly:
 
 ```bash
 sudo ./install.sh \
+  --profile <compatible-profile> \
   --data-dir /mnt/llm-data \
   --model <organization/model> \
   --model-revision <full-commit-sha> \
   --served-model-name <api-model-name>
 ```
 
-SGLang remains the default runtime. To use the latest official vLLM image:
+The selected profile supplies the runtime and model-specific behavior. To use
+the latest official vLLM image with a compatible profile:
 
 ```bash
 sudo ./install.sh \
+  --profile qwen38-fp8 \
   --data-dir /mnt/llm-data \
   --runtime vllm \
   --model <vllm-compatible-model> \
@@ -260,7 +265,7 @@ Unsloth's BF16 and FP8 mirrors can reuse the corresponding Qwen behavior
 profile with an explicit pinned revision. They do not need duplicate installer
 logic. The INT4 profile deliberately requires `--model` and
 `--model-revision`; newly uploaded community quantizations are not silently
-promoted to trusted defaults.
+promoted to built-in profiles.
 
 Custom model revisions must be full 40-character lowercase commit hashes so a
 rerun cannot silently download different code or weights. Mutable values such
@@ -280,19 +285,19 @@ Pass it with `--runtime-args-file /secure/path/runtime.args`. The installer
 rejects arguments that would override its model identity, binding,
 authentication, parallelism, or context controls.
 
-The default `PhalaCloud/GLM-5.2-W4AFP8` checkpoint cannot currently be selected
+The `PhalaCloud/GLM-5.2-W4AFP8` checkpoint cannot currently be selected
 with vLLM. Its model card says the W4AFP8 layout is SGLang-specific and untried
 on vLLM. The official GLM-5.2 FP8 checkpoint supports vLLM 0.23.0+, but it does
 not fit on an 8×H100 80 GB node. The installer therefore fails early for the
-unsafe default-model/vLLM combination instead of launching an unverified
+unsafe checkpoint/runtime combination instead of launching an unverified
 deployment.
 
-The built-in A100 checkpoint is vLLM-only. Its profile adds BF16 compute,
-`glm45` reasoning parsing, `glm47` tool-call parsing, and automatic tool choice
-for OpenAI-compatible clients. An explicit `--runtime sglang` with that
-checkpoint is rejected. A custom model can still combine `--profile a100` with
-its own pinned revision and runtime when the operator has verified that
-combination.
+The built-in `glm-5.2-w4a16` checkpoint is vLLM-only. Its profile adds BF16
+compute, `glm45` reasoning parsing, `glm47` tool-call parsing, and automatic
+tool choice for OpenAI-compatible clients. An explicit `--runtime sglang` with
+that checkpoint is rejected. A custom model can still combine
+`--profile glm-5.2-w4a16` with its own pinned revision and runtime when the
+operator has verified that combination.
 
 At the time of this release, the latest SGLang image uses CUDA 13.0.1 and needs
 NVIDIA driver 580.82.07 or newer, while the latest vLLM image uses CUDA 13.0.2
@@ -326,8 +331,8 @@ Use these client values:
 
 - Base URL: `http://<private-host>:8000/v1`
 - Model: the served name shown at the end of installation. It is
-  `glm-5.2-w4afp8` for H100, `glm-5.2-w4a16` for A100, and begins with
-  `qwen3.8-27b` or `deepseek-v4-flash` for the corresponding built-in profiles.
+  `glm-5.2-w4afp8`, `glm-5.2-w4a16`, or a name beginning with `qwen3.8-27b` or
+  `deepseek-v4-flash` for the corresponding built-in profiles.
 - API key: the value in `/etc/opsrabbit-llm/api-key`
 
 An illustrative OpsRabbit provider record is available at

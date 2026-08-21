@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/profiles.sh"
 
 DATA_DIR=""
-PROFILE="h100"
+PROFILE=""
 MODEL_WAS_SET=false
 REVISION_WAS_SET=false
 SERVED_NAME_WAS_SET=false
@@ -23,50 +23,19 @@ ACCESS_FILE=""
 STARTUP_TIMEOUT=14400
 ORIGINAL_ARGS=("$@")
 
-for ((argument_index = 0; argument_index < ${#ORIGINAL_ARGS[@]}; argument_index++)); do
-  if [[ "${ORIGINAL_ARGS[$argument_index]}" == "--list-profiles" ]]; then
-    list_profiles
-    exit 0
-  fi
-  if [[ "${ORIGINAL_ARGS[$argument_index]}" == "--profile" ]]; then
-    ((argument_index + 1 < ${#ORIGINAL_ARGS[@]})) || die "--profile requires a value."
-    PROFILE=${ORIGINAL_ARGS[$((argument_index + 1))]}
-  fi
-done
-
-load_profile "$PROFILE"
-RUNTIME=$PROFILE_DEFAULT_RUNTIME
-MODEL_ID=$PROFILE_MODEL_ID
-MODEL_REVISION=$PROFILE_MODEL_REVISION
-SERVED_MODEL_NAME=$PROFILE_SERVED_MODEL_NAME
-MODEL_FAMILY=$PROFILE_MODEL_FAMILY
-ALLOWED_RUNTIMES=$PROFILE_ALLOWED_RUNTIMES
-REQUIRED_GPU_COUNT=$PROFILE_GPU_COUNT
-REQUIRED_GPU_NAME=$PROFILE_GPU_NAME
-MIN_GPU_MEMORY_MIB=$PROFILE_MIN_GPU_MEMORY_MIB
-MIN_COMPUTE_CAPABILITY=$PROFILE_MIN_COMPUTE_CAPABILITY
-MIN_SYSTEM_MEMORY_MIB=$PROFILE_MIN_SYSTEM_MEMORY_MIB
-MIN_DATA_GIB=$PROFILE_MIN_DATA_GIB
-CONTEXT_LENGTH=$PROFILE_CONTEXT_LENGTH
-TRUST_REMOTE_CODE=$PROFILE_TRUST_REMOTE_CODE
-GGUF_FILES=("${PROFILE_GGUF_FILES[@]}")
-GGUF_FILENAME=${GGUF_FILES[0]-}
-MTP_MODE=$PROFILE_MTP_MODE
-
 usage() {
   cat <<'EOF'
-Install a model with an authenticated OpenAI-compatible API.
-The default profile is GLM-5.2 W4AFP8 on H100 with SGLang.
+Install a selected model profile with an authenticated OpenAI-compatible API.
 
 Usage:
-  sudo ./install.sh --data-dir PATH [options]
-  ./install.sh --data-dir PATH --check-only [options]
+  sudo ./install.sh --profile NAME --data-dir PATH [options]
+  ./install.sh --profile NAME --data-dir PATH --check-only [options]
 
 Required:
+  --profile NAME            Deployment profile; run --list-profiles to view choices
   --data-dir PATH           Existing mounted directory meeting the selected profile
 
 Options:
-  --profile NAME            Deployment profile (default: h100)
   --list-profiles           Print available profiles and exit
   --runtime NAME            sglang, vllm, or llamacpp
   --model ID                Hugging Face model ID
@@ -93,6 +62,41 @@ The installer does not provision cloud resources, configure firewalls, format
 disks, or install NVIDIA drivers.
 EOF
 }
+
+for ((argument_index = 0; argument_index < ${#ORIGINAL_ARGS[@]}; argument_index++)); do
+  if [[ "${ORIGINAL_ARGS[$argument_index]}" == "--list-profiles" ]]; then
+    list_profiles
+    exit 0
+  fi
+  if [[ "${ORIGINAL_ARGS[$argument_index]}" == "-h" || "${ORIGINAL_ARGS[$argument_index]}" == "--help" ]]; then
+    usage
+    exit 0
+  fi
+  if [[ "${ORIGINAL_ARGS[$argument_index]}" == "--profile" ]]; then
+    ((argument_index + 1 < ${#ORIGINAL_ARGS[@]})) || die "--profile requires a value."
+    PROFILE=${ORIGINAL_ARGS[$((argument_index + 1))]}
+  fi
+done
+
+[[ -n "$PROFILE" ]] || die "--profile is required. Run --list-profiles to view available model profiles."
+load_profile "$PROFILE"
+RUNTIME=$PROFILE_DEFAULT_RUNTIME
+MODEL_ID=$PROFILE_MODEL_ID
+MODEL_REVISION=$PROFILE_MODEL_REVISION
+SERVED_MODEL_NAME=$PROFILE_SERVED_MODEL_NAME
+MODEL_FAMILY=$PROFILE_MODEL_FAMILY
+ALLOWED_RUNTIMES=$PROFILE_ALLOWED_RUNTIMES
+REQUIRED_GPU_COUNT=$PROFILE_GPU_COUNT
+REQUIRED_GPU_NAME=$PROFILE_GPU_NAME
+MIN_GPU_MEMORY_MIB=$PROFILE_MIN_GPU_MEMORY_MIB
+MIN_COMPUTE_CAPABILITY=$PROFILE_MIN_COMPUTE_CAPABILITY
+MIN_SYSTEM_MEMORY_MIB=$PROFILE_MIN_SYSTEM_MEMORY_MIB
+MIN_DATA_GIB=$PROFILE_MIN_DATA_GIB
+CONTEXT_LENGTH=$PROFILE_CONTEXT_LENGTH
+TRUST_REMOTE_CODE=$PROFILE_TRUST_REMOTE_CODE
+GGUF_FILES=("${PROFILE_GGUF_FILES[@]}")
+GGUF_FILENAME=${GGUF_FILES[0]-}
+MTP_MODE=$PROFILE_MTP_MODE
 
 while (($#)); do
   case "$1" in

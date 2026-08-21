@@ -31,19 +31,39 @@ expect_failure_contains \
   ./install.sh --data-dir / --profile other --check-only
 
 expect_failure_contains \
-  "A100 profile selects vLLM and pinned defaults" \
-  "Selected profile a100: vllm, lowbitcoffee/GLM-5.2-W4A16@55c92ae85b7ec564c94634964b6f5efe5c09a844, 8x A100, 32768-token context." \
+  "profile selection is required" \
+  "--profile is required" \
+  ./install.sh --data-dir / --check-only
+
+expect_failure_contains \
+  "legacy hardware profile name is removed" \
+  "Unknown profile h100" \
+  ./install.sh --data-dir / --profile h100 --check-only
+
+expect_failure_contains \
+  "second legacy hardware profile name is removed" \
+  "Unknown profile a100" \
   ./install.sh --data-dir / --profile a100 --check-only
 
 expect_failure_contains \
-  "built-in A100 checkpoint rejects SGLang" \
-  "Profile a100 supports runtime(s) vllm" \
-  ./install.sh --data-dir / --profile a100 --runtime sglang --check-only
+  "GLM-5.2 W4AFP8 profile selects SGLang and pinned defaults" \
+  "Selected profile glm-5.2-w4afp8: sglang, PhalaCloud/GLM-5.2-W4AFP8@e42e1aee344f812b6fb73f503bfbe6a227727396, 8x H100, 131072-token context." \
+  ./install.sh --data-dir / --profile glm-5.2-w4afp8 --check-only
 
 expect_failure_contains \
-  "custom A100-profile model keeps explicit runtime" \
-  "Selected profile a100: sglang, example/model@0123456789abcdef0123456789abcdef01234567, 8x A100, 32768-token context." \
-  ./install.sh --data-dir / --profile a100 --runtime sglang \
+  "GLM-5.2 W4A16 profile selects vLLM and pinned defaults" \
+  "Selected profile glm-5.2-w4a16: vllm, lowbitcoffee/GLM-5.2-W4A16@55c92ae85b7ec564c94634964b6f5efe5c09a844, 8x A100, 32768-token context." \
+  ./install.sh --data-dir / --profile glm-5.2-w4a16 --check-only
+
+expect_failure_contains \
+  "built-in A100 checkpoint rejects SGLang" \
+  "Profile glm-5.2-w4a16 supports runtime(s) vllm" \
+  ./install.sh --data-dir / --profile glm-5.2-w4a16 --runtime sglang --check-only
+
+expect_failure_contains \
+  "custom model based on GLM-5.2 W4A16 keeps explicit runtime" \
+  "Selected profile glm-5.2-w4a16: sglang, example/model@0123456789abcdef0123456789abcdef01234567, 8x A100, 32768-token context." \
+  ./install.sh --data-dir / --profile glm-5.2-w4a16 --runtime sglang \
   --model example/model --model-revision 0123456789abcdef0123456789abcdef01234567 --check-only
 
 expect_failure_contains \

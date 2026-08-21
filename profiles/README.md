@@ -53,9 +53,9 @@ revisions, or customer information in a profile.
 - Built-in model revisions are immutable. Updating one is a reviewed change.
 - Runtime image tags follow the newest official release and are resolved to a
   digest at install time.
-- A capability profile should avoid GPU product names unless the checkpoint is
-  genuinely tied to a named family, as with the existing GLM H100/A100 paths.
-- Community quantizations need an explicit quality, reasoning, streaming, and
-  tool-call validation before becoming a built-in default.
+- Profile names identify the model and format, not the hardware used to run
+  them. Hardware requirements belong in the profile fields and documentation.
+- Community quantizations need explicit quality, reasoning, streaming, and
+  tool-call validation before becoming a built-in profile.
 - GGUF profiles pin one exact file or an ordered shard list so installation
   downloads only the selected quantization rather than the whole repository.
