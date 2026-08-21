@@ -54,7 +54,7 @@ load_profile deepseek-v4-flash-0731-unsloth-gguf-q4
 [[ "${PROFILE_GGUF_FILES[0]}" == "UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00001-of-00005.gguf" ]]
 [[ "${PROFILE_GGUF_FILES[4]}" == "UD-Q4_K_XL/DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00005-of-00005.gguf" ]]
 
-load_profile h100
+load_profile glm-5.2-w4afp8
 [[ "$PROFILE_GPU_COUNT" -eq 8 ]]
 [[ "$PROFILE_MODEL_FAMILY" == "glm-5.2-w4afp8" ]]
 
