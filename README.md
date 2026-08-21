@@ -16,10 +16,10 @@ drivers.
 
 ## Supported profiles
 
-The overall default remains GLM-5.2. Qwen3.8 profiles are hardware-capability
-profiles: they check GPU count, memory, compute capability where required,
-system memory, disk, and runtime compatibility without requiring a particular
-GPU product name.
+The overall default remains GLM-5.2. Qwen3.8 and DeepSeek-V4-Flash profiles are
+hardware-capability profiles: they check GPU count, memory, compute capability
+where required, system memory, disk, and runtime compatibility without
+requiring a particular GPU product name.
 
 | Profile | Checkpoint and format | Default runtime | Default hardware floor | Data space | Context | Position |
 | --- | --- | --- | --- | ---: | ---: | --- |
@@ -34,6 +34,12 @@ GPU product name.
 | `qwen38-unsloth-gguf-q6` | Unsloth Dynamic GGUF Q6, about 24 GB | llama.cpp | 1× 30,000 MiB | 60 GiB | 32,768 | Higher-quality GGUF |
 | `qwen38-unsloth-gguf-q8` | Unsloth Dynamic GGUF Q8, about 31 GB | llama.cpp | 1× 45,000 MiB | 75 GiB | 32,768 | Highest-quality practical GGUF |
 | `qwen38-int4` | Operator-supplied pinned Qwen3.8 AWQ/GPTQ W4A16 | vLLM; SGLang optional | 1× 23,000 MiB, compute 7.5+ | 60 GiB | 32,768 | Format support pending a trusted built-in checkpoint |
+| `deepseek-v4-flash-0731` | Official 0731 mixed FP4/FP8 checkpoint with DSpark weights, about 167 GB | SGLang; vLLM optional | 4× 130,000 MiB, compute 9.0+ | 250 GiB | 32,768 | Preferred DeepSeek profile |
+| `deepseek-v4-flash-0423` | Official preview mixed FP4/FP8 checkpoint, about 160 GB | SGLang; vLLM optional | 8× 79,000 MiB, compute 9.0+ | 240 GiB | 32,768 | Verified H100-class compatibility path |
+| `deepseek-v4-flash-0731-unsloth-gguf-q2` | Unsloth sharded GGUF Q2, about 96.8 GB | llama.cpp | 1× 15,000 MiB plus 128 GiB host RAM | 140 GiB | 32,768 | Lowest-memory DeepSeek test profile |
+| `deepseek-v4-flash-0731-unsloth-gguf-q3` | Unsloth sharded GGUF Q3, about 128 GB | llama.cpp | 1× 15,000 MiB plus 160 GiB host RAM | 175 GiB | 32,768 | Reduced-memory DeepSeek profile |
+| `deepseek-v4-flash-0731-unsloth-gguf-q4` | Unsloth sharded GGUF Q4, about 155 GB | llama.cpp | 1× 15,000 MiB plus 192 GiB host RAM | 210 GiB | 32,768 | Balanced compatibility profile |
+| `deepseek-v4-flash-0731-unsloth-gguf-q8` | Unsloth sharded GGUF Q8, about 162 GB | llama.cpp | 1× 15,000 MiB plus 192 GiB host RAM | 220 GiB | 32,768 | Highest-fidelity GGUF profile |
 
 List the profiles present in the checked-out release:
 
@@ -77,6 +83,27 @@ Checkpoint details and published sizes are available from the
 [official BF16 model](https://huggingface.co/Qwen/Qwen3.8-27B),
 [official FP8 model](https://huggingface.co/Qwen/Qwen3.8-27B-FP8), and
 [Unsloth Qwen3.8 guide](https://unsloth.ai/models/qwen3.8-27b).
+
+The DeepSeek native profiles configure the dedicated DeepSeek-V4 reasoning,
+tool-call, and tokenizer modes required by the model's non-Jinja message
+encoding. The 0731 checkpoint is preferred for its stronger agent behavior;
+the unversioned official checkpoint is commonly called 0423 and remains the
+conservative 8×H100 path. Both expose the same authenticated OpenAI-compatible
+API. The GGUF profiles use exact Unsloth shard lists and llama.cpp, allowing
+GPU plus host-memory offload on systems that cannot run the native checkpoint.
+They are compatibility paths rather than promises of production throughput on
+a single small GPU.
+
+The 0731 repository includes DSpark speculative weights, but the built-in
+profile leaves speculative decoding disabled for its first correctness and
+quality baseline. It can be exposed as a separate reviewed profile after
+matching-hardware validation instead of being silently enabled here.
+
+Checkpoint details and published deployment guidance are available from the
+[official 0731 model](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731),
+[official preview model](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash),
+[SGLang DeepSeek-V4 cookbook](https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4),
+and [Unsloth 0731 GGUF repository](https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF).
 
 ## Before installation
 
@@ -149,6 +176,19 @@ Install Qwen3.8 FP8 or Unsloth Q4 GGUF in the same way:
 sudo ./install.sh --profile qwen38-fp8 --data-dir /mnt/llm-data
 sudo ./install.sh --profile qwen38-unsloth-gguf-q4 --data-dir /mnt/llm-data
 ```
+
+Install the preferred native DeepSeek release or its broadly compatible Q4
+GGUF profile:
+
+```bash
+sudo ./install.sh --profile deepseek-v4-flash-0731 --data-dir /mnt/llm-data
+sudo ./install.sh --profile deepseek-v4-flash-0731-unsloth-gguf-q4 \
+  --data-dir /mnt/llm-data
+```
+
+The native 0423 profile defaults to eight 80 GB Hopper GPUs. GGUF profiles
+default to one GPU with host-memory offload; use `--gpu-count` and the matching
+memory overrides to make all GPUs on a larger host available to llama.cpp.
 
 To make the API available on a trusted local network, bind all IPv4 interfaces
 and restrict the API port in the host or network firewall:
@@ -287,7 +327,7 @@ Use these client values:
 - Base URL: `http://<private-host>:8000/v1`
 - Model: the served name shown at the end of installation. It is
   `glm-5.2-w4afp8` for H100, `glm-5.2-w4a16` for A100, and begins with
-  `qwen3.8-27b` for the built-in Qwen profiles.
+  `qwen3.8-27b` or `deepseek-v4-flash` for the corresponding built-in profiles.
 - API key: the value in `/etc/opsrabbit-llm/api-key`
 
 An illustrative OpsRabbit provider record is available at
@@ -382,6 +422,6 @@ future pull requests.
 ## License
 
 The scripts and documentation in this repository are licensed under the
-[Apache License 2.0](LICENSE). GLM, Qwen, Unsloth checkpoints, and third-party
-packages have their own licenses and release-specific terms; review and accept
-those separately before deployment.
+[Apache License 2.0](LICENSE). GLM, Qwen, DeepSeek, Unsloth checkpoints, and
+third-party packages have their own licenses and release-specific terms;
+review and accept those separately before deployment.

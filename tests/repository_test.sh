@@ -75,5 +75,10 @@ assert_contains "RUNTIME_IMAGE=\$(docker image inspect" install.sh
 assert_contains "source \"\$SCRIPT_DIR/lib/profiles.sh\"" install.sh
 assert_contains 'declare -p PROFILE_SGLANG_ARGS' install.sh
 assert_contains 'Qwen3.8-27B-UD-Q4_K_XL.gguf' profiles/qwen38-unsloth-gguf-q4.conf
+assert_contains 'PROFILE_GGUF_FILES=(' profiles/deepseek-v4-flash-0731-unsloth-gguf-q4.conf
+assert_contains 'DeepSeek-V4-Flash-0731-UD-Q4_K_XL-00005-of-00005.gguf' profiles/deepseek-v4-flash-0731-unsloth-gguf-q4.conf
+assert_contains "for gguf_file in \"\${GGUF_FILES[@]}\"" install.sh
+assert_contains '--tool-call-parser deepseekv4' profiles/deepseek-v4-flash-0731.conf
+assert_contains '--tokenizer-mode deepseek_v4' profiles/deepseek-v4-flash-0731.conf
 
 printf 'PASS: repository integration assertions\n'
