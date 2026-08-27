@@ -24,8 +24,8 @@ while IFS= read -r profile_name; do
   profiles_checked=$((profiles_checked + 1))
 done < <(list_profiles)
 
-[[ "$profiles_checked" -eq 17 ]] || {
-  printf 'FAIL: expected 17 profiles, found %d\n' "$profiles_checked" >&2
+[[ "$profiles_checked" -eq 18 ]] || {
+  printf 'FAIL: expected 18 profiles, found %d\n' "$profiles_checked" >&2
   exit 1
 }
 
@@ -57,5 +57,14 @@ load_profile deepseek-v4-flash-0731-unsloth-gguf-q4
 load_profile glm-5.2-w4afp8
 [[ "$PROFILE_GPU_COUNT" -eq 8 ]]
 [[ "$PROFILE_MODEL_FAMILY" == "glm-5.2-w4afp8" ]]
+
+load_profile glm-5.3-flash-fp8
+[[ "$PROFILE_MODEL_ID" == "zai-org/GLM-5.3-Flash" ]]
+[[ "$PROFILE_DEFAULT_RUNTIME" == "vllm" ]]
+[[ "$PROFILE_ALLOWED_RUNTIMES" == "vllm" ]]
+[[ "$PROFILE_MIN_TOTAL_GPU_MEMORY_MIB" -eq 386000 ]]
+[[ "$PROFILE_VLLM_IMAGE_TAG" == "vllm/vllm-openai:glm53-flash" ]]
+[[ " ${PROFILE_VLLM_ARGS[*]} " == *" --reasoning-parser glm45 "* ]]
+[[ " ${PROFILE_VLLM_ARGS[*]} " == *" --tool-call-parser glm47 "* ]]
 
 printf 'PASS: %d catalog profiles validated\n' "$profiles_checked"

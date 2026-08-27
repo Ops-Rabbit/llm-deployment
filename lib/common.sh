@@ -8,6 +8,7 @@ MIN_DATA_GIB=600
 MIN_DOCKER_FREE_GIB=80
 REQUIRED_GPU_COUNT=8
 MIN_GPU_MEMORY_MIB=79000
+MIN_TOTAL_GPU_MEMORY_MIB=0
 REQUIRED_GPU_NAME="H100"
 MIN_COMPUTE_CAPABILITY=""
 MIN_SYSTEM_MEMORY_MIB=0
@@ -106,6 +107,12 @@ validate_model_revision() {
   local revision=$1
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] ||
     die "Model revision must be a full 40-character lowercase commit hash."
+}
+
+validate_container_image_tag() {
+  local image_tag=$1
+  [[ "$image_tag" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]] ||
+    die "Invalid container image tag: ${image_tag}."
 }
 
 canonicalize_data_directory() {
@@ -253,6 +260,7 @@ validate_effective_capacity_kib() {
 validate_gpu_csv() {
   local gpu_csv=$1
   local count=0
+  local total_memory=0
   local name memory
 
   while IFS=',' read -r name memory; do
@@ -268,10 +276,13 @@ validate_gpu_csv() {
     [[ "$memory" =~ ^[0-9]+$ ]] || die "Could not read memory for GPU ${count}."
     ((memory >= MIN_GPU_MEMORY_MIB)) ||
       die "GPU ${count} has ${memory} MiB; at least ${MIN_GPU_MEMORY_MIB} MiB is required."
+    ((total_memory += memory))
   done <<<"$gpu_csv"
 
   ((count == REQUIRED_GPU_COUNT)) ||
     die "Exactly ${REQUIRED_GPU_COUNT} matching GPUs are required; found ${count}."
+  ((MIN_TOTAL_GPU_MEMORY_MIB == 0 || total_memory >= MIN_TOTAL_GPU_MEMORY_MIB)) ||
+    die "The GPUs provide ${total_memory} MiB total; at least ${MIN_TOTAL_GPU_MEMORY_MIB} MiB is required."
 }
 
 validate_compute_capability_csv() {

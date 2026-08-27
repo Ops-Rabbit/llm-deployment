@@ -61,6 +61,21 @@ expect_failure_contains \
   ./install.sh --data-dir / --profile glm-5.2-w4a16 --runtime sglang --check-only
 
 expect_failure_contains \
+  "official GLM-5.3 Flash FP8 profile selects vLLM and pinned defaults" \
+  "Selected profile glm-5.3-flash-fp8: vllm, zai-org/GLM-5.3-Flash@3f1971b7b5f7a528c9c4ef6212c8785298a8c24a, 8x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile glm-5.3-flash-fp8 --check-only
+
+expect_failure_contains \
+  "official GLM-5.3 Flash FP8 rejects unvalidated SGLang" \
+  "Profile glm-5.3-flash-fp8 supports runtime(s) vllm" \
+  ./install.sh --data-dir / --profile glm-5.3-flash-fp8 --runtime sglang --check-only
+
+expect_failure_contains \
+  "official GLM-5.3 Flash FP8 leaves MTP disabled" \
+  "--enable-mtp is not supported by profile glm-5.3-flash-fp8" \
+  ./install.sh --data-dir / --profile glm-5.3-flash-fp8 --enable-mtp --check-only
+
+expect_failure_contains \
   "custom model based on GLM-5.2 W4A16 keeps explicit runtime" \
   "Selected profile glm-5.2-w4a16: sglang, example/model@0123456789abcdef0123456789abcdef01234567, 8x A100, 32768-token context." \
   ./install.sh --data-dir / --profile glm-5.2-w4a16 --runtime sglang \
