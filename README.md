@@ -22,6 +22,10 @@ particular GPU product name only when its checkpoint is tied to that hardware.
 | `glm-5.2-w4afp8` | `PhalaCloud/GLM-5.2-W4AFP8` | SGLang | 8× H100 79,000 MiB | 600 GiB | 131,072 | Community GLM W4AFP8 baseline |
 | `glm-5.2-w4a16` | `lowbitcoffee/GLM-5.2-W4A16` | vLLM | 8× A100 79,000 MiB | 600 GiB | 32,768 | Community GLM W4A16 baseline |
 | `glm-5.3-flash-fp8` | Official native FP8, about 306 GiB | vLLM | 8× 79,000 MiB, 386,000 MiB total, compute 9.0+ | 450 GiB | 32,768 | Official GLM-5.3-Flash baseline |
+| `qwen38-flash-next-fp8` | Official Qwen3.8-Flash-Next FP8, about 173 GiB | vLLM | 8× 140,000 MiB, 900,000 MiB total, compute 9.0+ | 250 GiB | 32,768 | Official high-throughput Flash-Next baseline |
+| `qwen38-flash-next-unsloth-gguf-q4` | Unsloth `UD-Q4_K_XL`, about 103.7 GiB | llama.cpp | 1× 23,000 MiB plus 128 GiB host RAM | 150 GiB | 32,768 | Highest-quality requested Flash-Next GGUF |
+| `qwen38-flash-next-unsloth-gguf-iq4` | Unsloth `UD-IQ4_XS`, about 87.2 GiB | llama.cpp | 1× 23,000 MiB plus 96 GiB host RAM | 130 GiB | 32,768 | Balanced smaller-memory Flash-Next GGUF |
+| `qwen38-flash-next-unsloth-gguf-q3` | Unsloth `UD-Q3_K_XL`, about 83.8 GiB | llama.cpp | 1× 23,000 MiB plus 96 GiB host RAM | 125 GiB | 32,768 | Lowest-memory requested Flash-Next GGUF |
 | `qwen38-bf16` | Official Qwen3.8-27B BF16, 55.6 GB | SGLang; vLLM optional | 1× 79,000 MiB, compute 8.0+ | 100 GiB | 32,768 | Highest-fidelity Qwen baseline |
 | `qwen38-fp8` | Official Qwen3.8-27B FP8, 30.9 GB | SGLang; vLLM optional | 1× 45,000 MiB, compute 8.9+ | 75 GiB | 32,768 | Recommended Qwen cloud profile |
 | `qwen38-unsloth-nvfp4` | Unsloth NVFP4, about 23.4 GB with MTP | SGLang; vLLM optional | 1× 30,000 MiB, Blackwell compute 10.0+ | 60 GiB | 32,768 | Fast Blackwell profile |
@@ -78,6 +82,36 @@ first correctness baseline.
 Current checkpoint and deployment details are available from the
 [official model](https://huggingface.co/zai-org/GLM-5.3-Flash) and
 [official vLLM recipe](https://recipes.vllm.ai/zai-org/GLM-5.3-Flash).
+
+The `qwen38-flash-next-fp8` profile uses Qwen's official FP8 checkpoint and
+the dedicated vLLM compatibility image. The checkpoint is about 172.8 GiB,
+while the documented Hopper configuration uses expert parallelism across an
+eight-GPU H200-class node. The profile keeps the native 262,144-token context
+at a conservative 32,768 tokens initially so weights, runtime state, and KV
+cache have clear headroom. Reasoning and automatic tool calling are enabled;
+MTP speculative decoding and embedding-table CPU offload remain disabled for
+the first correctness baseline.
+
+The three Flash-Next Unsloth profiles use exact ordered shard lists from one
+pinned GGUF revision. llama.cpp can divide work between GPU and host memory,
+so these profiles make the model available on smaller GPUs backed by 96–128
+GiB of system memory. `UD-Q4_K_XL` prioritizes quality, `UD-IQ4_XS` reduces the
+footprint to about 87.2 GiB, and `UD-Q3_K_XL` reduces it to about 83.8 GiB.
+They use llama.cpp's embedded Jinja template, reasoning extraction, and
+authenticated OpenAI-compatible API. Vision projection and MTP are not part of
+this initial text-and-tools baseline.
+
+Flash-Next is released under the Qwen Community License 1.0 rather than Apache
+2.0. Its terms require a separate Qwen license for specified commercial Model
+as a Service and AI Work Assistant uses. Operators must review and accept the
+checkpoint license, and obtain any required commercial rights, before serving
+either the official or Unsloth-derived profiles.
+
+Current details are available from the
+[official FP8 model](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8),
+[official vLLM recipe](https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next),
+[Unsloth GGUF repository](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF),
+and [Qwen Community License](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8/blob/main/LICENSE).
 
 These are conservative defaults, not a GPU product allowlist. GPU count,
 optional name matching, per-GPU and aggregate memory floors, host-memory floor,
@@ -170,6 +204,16 @@ For a 24 GB GPU, use the recommended Unsloth Q4 GGUF profile:
   --data-dir /mnt/llm-data --check-only
 ```
 
+For Flash-Next, select either the official multi-H200 FP8 baseline or one of
+the host-offloaded Unsloth profiles:
+
+```bash
+./install.sh --profile qwen38-flash-next-fp8 \
+  --data-dir /mnt/llm-data --check-only
+./install.sh --profile qwen38-flash-next-unsloth-gguf-q4 \
+  --data-dir /mnt/llm-data --check-only
+```
+
 ## Install
 
 The selected model listens only on the machine itself unless a different
@@ -192,6 +236,14 @@ Install Qwen3.8 FP8 or Unsloth Q4 GGUF in the same way:
 ```bash
 sudo ./install.sh --profile qwen38-fp8 --data-dir /mnt/llm-data
 sudo ./install.sh --profile qwen38-unsloth-gguf-q4 --data-dir /mnt/llm-data
+```
+
+Install the official Flash-Next FP8 checkpoint or a smaller Unsloth GGUF:
+
+```bash
+sudo ./install.sh --profile qwen38-flash-next-fp8 --data-dir /mnt/llm-data
+sudo ./install.sh --profile qwen38-flash-next-unsloth-gguf-iq4 \
+  --data-dir /mnt/llm-data
 ```
 
 Install the preferred native DeepSeek release or its broadly compatible Q4
@@ -349,7 +401,8 @@ Use these client values:
 - Base URL: `http://<private-host>:8000/v1`
 - Model: the served name shown at the end of installation. It is
   `glm-5.2-w4afp8`, `glm-5.2-w4a16`, or a name beginning with `qwen3.8-27b` or
-  `deepseek-v4-flash` for the corresponding built-in profiles.
+  `qwen3.8-flash-next` or `deepseek-v4-flash` for the corresponding built-in
+  profiles.
 - API key: the value in `/etc/opsrabbit-llm/api-key`
 
 An illustrative OpsRabbit provider record is available at
@@ -446,4 +499,6 @@ future pull requests.
 The scripts and documentation in this repository are licensed under the
 [Apache License 2.0](LICENSE). GLM, Qwen, DeepSeek, Unsloth checkpoints, and
 third-party packages have their own licenses and release-specific terms;
-review and accept those separately before deployment.
+review and accept those separately before deployment. In particular,
+Qwen3.8-Flash-Next and its Unsloth derivatives use the Qwen Community License
+1.0 and are not covered by this repository's Apache 2.0 license.

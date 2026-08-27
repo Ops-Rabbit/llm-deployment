@@ -24,8 +24,8 @@ while IFS= read -r profile_name; do
   profiles_checked=$((profiles_checked + 1))
 done < <(list_profiles)
 
-[[ "$profiles_checked" -eq 18 ]] || {
-  printf 'FAIL: expected 18 profiles, found %d\n' "$profiles_checked" >&2
+[[ "$profiles_checked" -eq 22 ]] || {
+  printf 'FAIL: expected 22 profiles, found %d\n' "$profiles_checked" >&2
   exit 1
 }
 
@@ -39,6 +39,33 @@ load_profile qwen38-unsloth-gguf-q4
 [[ "$PROFILE_GGUF_FILENAME" == "Qwen3.8-27B-UD-Q4_K_XL.gguf" ]]
 [[ "${#PROFILE_GGUF_FILES[@]}" -eq 1 ]]
 [[ " ${PROFILE_LLAMACPP_ARGS[*]} " == *" --jinja "* ]]
+
+load_profile qwen38-flash-next-fp8
+[[ "$PROFILE_MODEL_ID" == "Qwen/Qwen3.8-Flash-Next-FP8" ]]
+[[ "$PROFILE_DEFAULT_RUNTIME" == "vllm" ]]
+[[ "$PROFILE_ALLOWED_RUNTIMES" == "vllm" ]]
+[[ "$PROFILE_GPU_COUNT" -eq 8 ]]
+[[ "$PROFILE_MIN_GPU_MEMORY_MIB" -eq 140000 ]]
+[[ "$PROFILE_MIN_TOTAL_GPU_MEMORY_MIB" -eq 900000 ]]
+[[ "$PROFILE_VLLM_IMAGE_TAG" == "vllm/vllm-openai:qwen38-flash-next" ]]
+[[ " ${PROFILE_VLLM_ARGS[*]} " == *" --enable-expert-parallel "* ]]
+[[ " ${PROFILE_VLLM_ARGS[*]} " == *" --tool-call-parser qwen3_xml "* ]]
+
+load_profile qwen38-flash-next-unsloth-gguf-q4
+[[ "$PROFILE_DEFAULT_RUNTIME" == "llamacpp" ]]
+[[ "${#PROFILE_GGUF_FILES[@]}" -eq 4 ]]
+[[ "${PROFILE_GGUF_FILES[0]}" == "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf" ]]
+[[ "${PROFILE_GGUF_FILES[3]}" == "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf" ]]
+
+load_profile qwen38-flash-next-unsloth-gguf-iq4
+[[ "${#PROFILE_GGUF_FILES[@]}" -eq 3 ]]
+[[ "${PROFILE_GGUF_FILES[0]}" == "UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf" ]]
+[[ "$PROFILE_MIN_SYSTEM_MEMORY_MIB" -eq 98304 ]]
+
+load_profile qwen38-flash-next-unsloth-gguf-q3
+[[ "${#PROFILE_GGUF_FILES[@]}" -eq 3 ]]
+[[ "${PROFILE_GGUF_FILES[2]}" == "UD-Q3_K_XL/Qwen3.8-Flash-Next-UD-Q3_K_XL-00003-of-00003.gguf" ]]
+[[ " ${PROFILE_LLAMACPP_ARGS[*]} " == *" --reasoning-format deepseek "* ]]
 
 load_profile deepseek-v4-flash-0731
 [[ "$PROFILE_DEFAULT_RUNTIME" == "sglang" ]]

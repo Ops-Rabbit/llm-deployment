@@ -102,6 +102,41 @@ expect_failure_contains \
   ./install.sh --data-dir / --profile qwen38-unsloth-gguf-q4 --check-only
 
 expect_failure_contains \
+  "official Qwen3.8 Flash Next FP8 profile" \
+  "Selected profile qwen38-flash-next-fp8: vllm, Qwen/Qwen3.8-Flash-Next-FP8@970c569adaca6b35532111fd6b27351b2baefe50, 8x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile qwen38-flash-next-fp8 --check-only
+
+expect_failure_contains \
+  "official Qwen3.8 Flash Next FP8 rejects unvalidated SGLang" \
+  "Profile qwen38-flash-next-fp8 supports runtime(s) vllm" \
+  ./install.sh --data-dir / --profile qwen38-flash-next-fp8 --runtime sglang --check-only
+
+expect_failure_contains \
+  "official Qwen3.8 Flash Next FP8 leaves MTP disabled" \
+  "--enable-mtp is not supported by profile qwen38-flash-next-fp8" \
+  ./install.sh --data-dir / --profile qwen38-flash-next-fp8 --enable-mtp --check-only
+
+expect_failure_contains \
+  "Unsloth Qwen3.8 Flash Next Q4 GGUF profile" \
+  "Selected profile qwen38-flash-next-unsloth-gguf-q4: llamacpp, unsloth/Qwen3.8-Flash-Next-GGUF@824f539b2710e5a9e47af4952cf6578cf5ee8932, 1x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile qwen38-flash-next-unsloth-gguf-q4 --check-only
+
+expect_failure_contains \
+  "Unsloth Qwen3.8 Flash Next IQ4 GGUF profile" \
+  "Selected profile qwen38-flash-next-unsloth-gguf-iq4: llamacpp, unsloth/Qwen3.8-Flash-Next-GGUF@824f539b2710e5a9e47af4952cf6578cf5ee8932, 1x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile qwen38-flash-next-unsloth-gguf-iq4 --check-only
+
+expect_failure_contains \
+  "Unsloth Qwen3.8 Flash Next Q3 GGUF profile" \
+  "Selected profile qwen38-flash-next-unsloth-gguf-q3: llamacpp, unsloth/Qwen3.8-Flash-Next-GGUF@824f539b2710e5a9e47af4952cf6578cf5ee8932, 1x NVIDIA GPU, 32768-token context." \
+  ./install.sh --data-dir / --profile qwen38-flash-next-unsloth-gguf-q3 --check-only
+
+expect_failure_contains \
+  "Unsloth Qwen3.8 Flash Next GGUF rejects vLLM" \
+  "Profile qwen38-flash-next-unsloth-gguf-q4 supports runtime(s) llamacpp" \
+  ./install.sh --data-dir / --profile qwen38-flash-next-unsloth-gguf-q4 --runtime vllm --check-only
+
+expect_failure_contains \
   "DeepSeek V4 Flash 0731 native profile" \
   "Selected profile deepseek-v4-flash-0731: sglang, deepseek-ai/DeepSeek-V4-Flash-0731@7872f01b1d1fe23eabc4c98b48bffcef5a386062, 4x NVIDIA GPU, 32768-token context." \
   ./install.sh --data-dir / --profile deepseek-v4-flash-0731 --check-only
