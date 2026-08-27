@@ -21,6 +21,7 @@ particular GPU product name only when its checkpoint is tied to that hardware.
 | --- | --- | --- | --- | ---: | ---: | --- |
 | `glm-5.2-w4afp8` | `PhalaCloud/GLM-5.2-W4AFP8` | SGLang | 8× H100 79,000 MiB | 600 GiB | 131,072 | Community GLM W4AFP8 baseline |
 | `glm-5.2-w4a16` | `lowbitcoffee/GLM-5.2-W4A16` | vLLM | 8× A100 79,000 MiB | 600 GiB | 32,768 | Community GLM W4A16 baseline |
+| `glm-5.3-flash-fp8` | Official native FP8, about 306 GiB | vLLM | 8× 79,000 MiB, 386,000 MiB total, compute 9.0+ | 450 GiB | 32,768 | Official GLM-5.3-Flash baseline |
 | `qwen38-bf16` | Official Qwen3.8-27B BF16, 55.6 GB | SGLang; vLLM optional | 1× 79,000 MiB, compute 8.0+ | 100 GiB | 32,768 | Highest-fidelity Qwen baseline |
 | `qwen38-fp8` | Official Qwen3.8-27B FP8, 30.9 GB | SGLang; vLLM optional | 1× 45,000 MiB, compute 8.9+ | 75 GiB | 32,768 | Recommended Qwen cloud profile |
 | `qwen38-unsloth-nvfp4` | Unsloth NVFP4, about 23.4 GB with MTP | SGLang; vLLM optional | 1× 30,000 MiB, Blackwell compute 10.0+ | 60 GiB | 32,768 | Fast Blackwell profile |
@@ -43,10 +44,11 @@ List the profiles present in the checked-out release:
 ./install.sh --list-profiles
 ```
 
-Model revisions are pinned, while the official SGLang, vLLM, and llama.cpp
-runtime tags deliberately follow their newest published images. Each install
-resolves the selected runtime tag to an immutable digest before starting the
-service.
+Model revisions are pinned, while official SGLang, vLLM, and llama.cpp runtime
+tags deliberately follow their newest compatible published images. Profiles
+can select an official model-specific compatibility tag when support has not
+yet reached the shared latest image. Each install resolves the selected runtime
+tag to an immutable digest before starting the service.
 
 The W4AFP8 checkpoint is a community quantization of GLM-5.2. It is not the
 full-precision or official FP8 checkpoint. The model card reports roughly 440
@@ -62,12 +64,27 @@ disables Hopper-only vLLM kernel paths, and enables GLM reasoning and tool-call
 parsing. The repository checks validate the generated configuration; full
 throughput and quality validation still requires matching hardware.
 
+The `glm-5.3-flash-fp8` profile uses Z.ai's official native FP8 checkpoint and
+the dedicated official vLLM compatibility image required while integration is
+new. The checkpoint contains about 306 GiB of weights, and the vLLM recipe
+specifies at least 386 GB of aggregate GPU memory before runtime and KV-cache
+headroom. The profile therefore starts with eight 80 GB Hopper-or-newer GPUs,
+checks both per-GPU and aggregate memory, and uses a conservative 32,768-token
+context rather than advertising the model's one-million-token architectural
+maximum as an immediately safe operating point. Reasoning and automatic tool
+calling are enabled; optional MTP speculative decoding remains disabled for the
+first correctness baseline.
+
+Current checkpoint and deployment details are available from the
+[official model](https://huggingface.co/zai-org/GLM-5.3-Flash) and
+[official vLLM recipe](https://recipes.vllm.ai/zai-org/GLM-5.3-Flash).
+
 These are conservative defaults, not a GPU product allowlist. GPU count,
-optional name matching, per-GPU memory floor, host-memory floor, storage,
-context length, and compatible runtime can be overridden. Multiple GPUs should
-be mutually compatible and have similar memory. The operator remains
-responsible for validating performance and quality after changing profile
-floors.
+optional name matching, per-GPU and aggregate memory floors, host-memory floor,
+storage, context length, and compatible runtime can be overridden. Multiple
+GPUs should be mutually compatible and have similar memory. The operator
+remains responsible for validating performance and quality after changing
+profile floors.
 
 The Qwen profiles configure Qwen reasoning and tool-call parsing for SGLang and
 vLLM. The GGUF profiles run llama.cpp with its embedded Jinja template,

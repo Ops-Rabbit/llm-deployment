@@ -73,6 +73,12 @@ assert_contains 'LLAMACPP_IMAGE_TAG="ghcr.io/ggml-org/llama.cpp:server-cuda"' li
 assert_contains 'PROFILE_MODEL_ID="lowbitcoffee/GLM-5.2-W4A16"' profiles/glm-5.2-w4a16.conf
 assert_contains 'PROFILE_MODEL_REVISION="55c92ae85b7ec564c94634964b6f5efe5c09a844"' profiles/glm-5.2-w4a16.conf
 assert_contains 'PROFILE_CONTEXT_LENGTH=32768' profiles/glm-5.2-w4a16.conf
+assert_contains 'PROFILE_MODEL_ID="zai-org/GLM-5.3-Flash"' profiles/glm-5.3-flash-fp8.conf
+assert_contains 'PROFILE_MODEL_REVISION="3f1971b7b5f7a528c9c4ef6212c8785298a8c24a"' profiles/glm-5.3-flash-fp8.conf
+assert_contains 'PROFILE_MIN_TOTAL_GPU_MEMORY_MIB=386000' profiles/glm-5.3-flash-fp8.conf
+assert_contains 'PROFILE_VLLM_IMAGE_TAG="vllm/vllm-openai:glm53-flash"' profiles/glm-5.3-flash-fp8.conf
+assert_contains '--no-enable-flashinfer-autotune' profiles/glm-5.3-flash-fp8.conf
+assert_contains "RUNTIME_IMAGE_TAG=\${PROFILE_VLLM_IMAGE_TAG:-\$VLLM_IMAGE_TAG}" install.sh
 assert_contains "RUNTIME_IMAGE=\$(docker image inspect" install.sh
 assert_contains "source \"\$SCRIPT_DIR/lib/profiles.sh\"" install.sh
 assert_contains 'declare -p PROFILE_SGLANG_ARGS' install.sh

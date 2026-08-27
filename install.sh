@@ -46,6 +46,7 @@ Options:
   --gpu-count COUNT         Required GPU count (profile default when omitted)
   --gpu-name TEXT           Optional required GPU-name substring
   --min-gpu-memory-mib MIB  Minimum memory per GPU
+  --min-total-gpu-memory-mib MIB  Minimum aggregate GPU memory; zero disables
   --min-system-memory-mib N Minimum host memory in MiB
   --min-data-gib GIB        Free space plus existing selected-model cache
   --min-docker-free-gib GIB Free space required in Docker data root (default: 80)
@@ -89,6 +90,7 @@ ALLOWED_RUNTIMES=$PROFILE_ALLOWED_RUNTIMES
 REQUIRED_GPU_COUNT=$PROFILE_GPU_COUNT
 REQUIRED_GPU_NAME=$PROFILE_GPU_NAME
 MIN_GPU_MEMORY_MIB=$PROFILE_MIN_GPU_MEMORY_MIB
+MIN_TOTAL_GPU_MEMORY_MIB=$PROFILE_MIN_TOTAL_GPU_MEMORY_MIB
 MIN_COMPUTE_CAPABILITY=$PROFILE_MIN_COMPUTE_CAPABILITY
 MIN_SYSTEM_MEMORY_MIB=$PROFILE_MIN_SYSTEM_MEMORY_MIB
 MIN_DATA_GIB=$PROFILE_MIN_DATA_GIB
@@ -154,6 +156,11 @@ while (($#)); do
     --min-gpu-memory-mib)
       [[ $# -ge 2 ]] || die "--min-gpu-memory-mib requires a value."
       MIN_GPU_MEMORY_MIB=$2
+      shift 2
+      ;;
+    --min-total-gpu-memory-mib)
+      [[ $# -ge 2 ]] || die "--min-total-gpu-memory-mib requires a value."
+      MIN_TOTAL_GPU_MEMORY_MIB=$2
       shift 2
       ;;
     --min-system-memory-mib)
@@ -230,6 +237,7 @@ validate_model_value "Model" "$MODEL_ID"
 validate_huggingface_model_id "$MODEL_ID"
 validate_positive_integer "GPU count" "$REQUIRED_GPU_COUNT"
 validate_positive_integer "Minimum GPU memory" "$MIN_GPU_MEMORY_MIB"
+validate_nonnegative_integer "Minimum total GPU memory" "$MIN_TOTAL_GPU_MEMORY_MIB"
 validate_nonnegative_integer "Minimum system memory" "$MIN_SYSTEM_MEMORY_MIB"
 validate_positive_integer "Minimum data size" "$MIN_DATA_GIB"
 validate_positive_integer "Minimum Docker free space" "$MIN_DOCKER_FREE_GIB"
@@ -249,6 +257,9 @@ if [[ "$MODEL_WAS_SET" == "true" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
     PROFILE_VLLM_ENV=()
     PROFILE_LLAMACPP_ARGS=()
     PROFILE_LLAMACPP_ENV=()
+    PROFILE_SGLANG_IMAGE_TAG=""
+    PROFILE_VLLM_IMAGE_TAG=""
+    PROFILE_LLAMACPP_IMAGE_TAG=""
   fi
   if [[ "$TRUST_WAS_SET" != "true" ]]; then
     TRUST_REMOTE_CODE=false
@@ -275,15 +286,15 @@ runtime_is_allowed "$RUNTIME" "$ALLOWED_RUNTIMES" ||
 
 case "$RUNTIME" in
   sglang)
-    RUNTIME_IMAGE_TAG=$SGLANG_IMAGE_TAG
+    RUNTIME_IMAGE_TAG=${PROFILE_SGLANG_IMAGE_TAG:-$SGLANG_IMAGE_TAG}
     MIN_DRIVER_VERSION="580.82.07"
     ;;
   vllm)
-    RUNTIME_IMAGE_TAG=$VLLM_IMAGE_TAG
+    RUNTIME_IMAGE_TAG=${PROFILE_VLLM_IMAGE_TAG:-$VLLM_IMAGE_TAG}
     MIN_DRIVER_VERSION="580.95.05"
     ;;
   llamacpp)
-    RUNTIME_IMAGE_TAG=$LLAMACPP_IMAGE_TAG
+    RUNTIME_IMAGE_TAG=${PROFILE_LLAMACPP_IMAGE_TAG:-$LLAMACPP_IMAGE_TAG}
     MIN_DRIVER_VERSION="570.26.00"
     ((${#GGUF_FILES[@]})) ||
       die "llamacpp requires a profile with pinned GGUF files."
@@ -442,12 +453,12 @@ install -d -m 0755 /etc/opsrabbit-llm
 install -d -m 0755 /usr/local/lib/opsrabbit-llm /usr/local/sbin
 install -d -o root -g www-data -m 2750 /run/opsrabbit-llm
 
-log "Pulling the latest official ${RUNTIME} image. This image is large and may take several minutes."
+log "Pulling the selected official ${RUNTIME} image. This image is large and may take several minutes."
 docker pull "$RUNTIME_IMAGE_TAG"
 RUNTIME_IMAGE=$(docker image inspect --format '{{index .RepoDigests 0}}' "$RUNTIME_IMAGE_TAG")
 [[ "$RUNTIME_IMAGE" == *@sha256:* ]] || die "Could not resolve ${RUNTIME_IMAGE_TAG} to an immutable image digest."
 
-log "Verifying that the latest runtime can access the selected GPU configuration."
+log "Verifying that the selected runtime can access the selected GPU configuration."
 if [[ "$RUNTIME" == "llamacpp" ]]; then
   docker run --rm --gpus all "$RUNTIME_IMAGE" --list-devices 2>&1 |
     grep -Fq 'CUDA' ||

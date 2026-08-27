@@ -28,6 +28,7 @@ arguments. This keeps model churn out of `install.sh` and `run-model.sh`.
 | `PROFILE_GPU_COUNT` | Default exact GPU count |
 | `PROFILE_GPU_NAME` | Optional `nvidia-smi` name substring; empty means capability-based |
 | `PROFILE_MIN_GPU_MEMORY_MIB` | Minimum memory for every selected GPU |
+| `PROFILE_MIN_TOTAL_GPU_MEMORY_MIB` | Minimum aggregate memory across selected GPUs; zero disables this check |
 | `PROFILE_MIN_COMPUTE_CAPABILITY` | Optional NVIDIA compute-capability floor |
 | `PROFILE_MIN_SYSTEM_MEMORY_MIB` | Host-memory floor; zero disables this check |
 | `PROFILE_MIN_DATA_GIB` | Free data space plus the selected revision's existing cache |
@@ -40,6 +41,7 @@ arguments. This keeps model churn out of `install.sh` and `run-model.sh`.
 | `PROFILE_GGUF_FILENAME` | Exact root-level GGUF file downloaded for llama.cpp; retained for simple single-file models |
 | `PROFILE_GGUF_FILES` | Ordered GGUF file paths for sharded models; the first shard is passed to llama.cpp |
 | `PROFILE_MTP_MODE` | Optional supported speculative-decoding mode |
+| `PROFILE_SGLANG_IMAGE_TAG` / `PROFILE_VLLM_IMAGE_TAG` / `PROFILE_LLAMACPP_IMAGE_TAG` | Optional official compatibility image used instead of the runtime's shared latest tag |
 | `PROFILE_SGLANG_ARGS` / `PROFILE_VLLM_ARGS` / `PROFILE_LLAMACPP_ARGS` | Model-specific server arguments |
 | `PROFILE_SGLANG_ENV` / `PROFILE_VLLM_ENV` / `PROFILE_LLAMACPP_ENV` | Model-specific `NAME=value` container settings |
 

@@ -106,6 +106,13 @@ REQUIRED_GPU_COUNT=1
 REQUIRED_GPU_NAME=""
 MIN_GPU_MEMORY_MIB=23000
 expect_success "capability profile accepts any matching NVIDIA GPU name" validate_gpu_csv "NVIDIA L4, 23034"
+REQUIRED_GPU_COUNT=4
+MIN_GPU_MEMORY_MIB=79000
+MIN_TOTAL_GPU_MEMORY_MIB=386000
+expect_failure "aggregate GPU memory floor" validate_gpu_csv "$(make_gpu_csv 4 'NVIDIA H100 80GB HBM3' 81559)"
+expect_success "aggregate GPU memory above floor" validate_gpu_csv "$(make_gpu_csv 4 'NVIDIA H200' 143771)"
+REQUIRED_GPU_COUNT=1
+MIN_TOTAL_GPU_MEMORY_MIB=0
 expect_success "minimum compute capability" validate_compute_capability_csv "8.9" "8.9"
 expect_success "newer compute capability" validate_compute_capability_csv "10.0" "8.9"
 expect_failure "older compute capability" validate_compute_capability_csv "8.6" "8.9"
@@ -134,6 +141,8 @@ expect_failure "local model path" validate_huggingface_model_id /models/model-na
 expect_success "full immutable model revision" validate_model_revision 0123456789abcdef0123456789abcdef01234567
 expect_failure "mutable model revision" validate_model_revision main
 expect_failure "abbreviated model revision" validate_model_revision 0123456789abcdef
+expect_success "official container image tag" validate_container_image_tag vllm/vllm-openai:glm53-flash
+expect_failure "container image tag with whitespace" validate_container_image_tag 'vllm/vllm openai:latest'
 
 required_capacity_kib=$((MIN_DATA_GIB * 1024 * 1024))
 expect_success "fresh filesystem capacity" validate_effective_capacity_kib "$required_capacity_kib" 0
