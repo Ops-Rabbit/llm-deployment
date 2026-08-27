@@ -78,6 +78,13 @@ assert_contains 'PROFILE_MODEL_REVISION="3f1971b7b5f7a528c9c4ef6212c8785298a8c24
 assert_contains 'PROFILE_MIN_TOTAL_GPU_MEMORY_MIB=386000' profiles/glm-5.3-flash-fp8.conf
 assert_contains 'PROFILE_VLLM_IMAGE_TAG="vllm/vllm-openai:glm53-flash"' profiles/glm-5.3-flash-fp8.conf
 assert_contains '--no-enable-flashinfer-autotune' profiles/glm-5.3-flash-fp8.conf
+assert_contains 'PROFILE_MODEL_ID="Qwen/Qwen3.8-Flash-Next-FP8"' profiles/qwen38-flash-next-fp8.conf
+assert_contains 'PROFILE_VLLM_IMAGE_TAG="vllm/vllm-openai:qwen38-flash-next"' profiles/qwen38-flash-next-fp8.conf
+assert_contains '--enable-expert-parallel' profiles/qwen38-flash-next-fp8.conf
+assert_contains '--tool-call-parser qwen3_xml' profiles/qwen38-flash-next-fp8.conf
+assert_contains 'UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf' profiles/qwen38-flash-next-unsloth-gguf-q4.conf
+assert_contains 'UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf' profiles/qwen38-flash-next-unsloth-gguf-iq4.conf
+assert_contains 'UD-Q3_K_XL/Qwen3.8-Flash-Next-UD-Q3_K_XL-00003-of-00003.gguf' profiles/qwen38-flash-next-unsloth-gguf-q3.conf
 assert_contains "RUNTIME_IMAGE_TAG=\${PROFILE_VLLM_IMAGE_TAG:-\$VLLM_IMAGE_TAG}" install.sh
 assert_contains "RUNTIME_IMAGE=\$(docker image inspect" install.sh
 assert_contains "source \"\$SCRIPT_DIR/lib/profiles.sh\"" install.sh
