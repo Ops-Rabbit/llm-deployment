@@ -20,6 +20,7 @@ PORT=$DEFAULT_PORT
 MTP_ENABLED=false
 CHECK_ONLY=false
 ACCESS_FILE=""
+HF_TOKEN_FILE=""
 STARTUP_TIMEOUT=14400
 ORIGINAL_ARGS=("$@")
 
@@ -54,6 +55,7 @@ Options:
   --port PORT               API port (default: 8000)
   --context-length TOKENS   Model context window (profile default when omitted)
   --api-key-file PATH       Read an existing API key from a file
+  --hf-token-file PATH      Read a Hugging Face token for the model download
   --enable-mtp              Enable experimental MTP speculative decoding
   --startup-timeout SEC     Wait up to this many seconds for readiness (default: 14400)
   --check-only              Run hardware and storage checks without changing the host
@@ -203,6 +205,11 @@ while (($#)); do
       ACCESS_FILE=$2
       shift 2
       ;;
+    --hf-token-file)
+      [[ $# -ge 2 && -n "$2" ]] || die "--hf-token-file requires a path."
+      HF_TOKEN_FILE=$2
+      shift 2
+      ;;
     --startup-timeout)
       [[ $# -ge 2 ]] || die "--startup-timeout requires a value."
       STARTUP_TIMEOUT=$2
@@ -248,6 +255,7 @@ fi
 if [[ "$MODEL_WAS_SET" == "true" && "$MODEL_ID" != "$PROFILE_MODEL_ID" ]]; then
   [[ "$REVISION_WAS_SET" == "true" ]] ||
     die "A custom model requires --model-revision so deployments remain reproducible."
+  PROFILE_REQUIRES_HF_TOKEN=false
   if [[ "$PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE" != "true" ]]; then
     MODEL_FAMILY="custom"
     ALLOWED_RUNTIMES="sglang vllm"
@@ -294,12 +302,17 @@ case "$RUNTIME" in
     MIN_DRIVER_VERSION="580.95.05"
     ;;
   llamacpp)
+    [[ -z "$HF_TOKEN_FILE" ]] || die "--hf-token-file is supported only for SGLang and vLLM model downloads."
     RUNTIME_IMAGE_TAG=${PROFILE_LLAMACPP_IMAGE_TAG:-$LLAMACPP_IMAGE_TAG}
     MIN_DRIVER_VERSION="570.26.00"
     ((${#GGUF_FILES[@]})) ||
       die "llamacpp requires a profile with pinned GGUF files."
     ;;
 esac
+
+if [[ "$PROFILE_REQUIRES_HF_TOKEN" == "true" && "$CHECK_ONLY" != "true" && -z "$HF_TOKEN_FILE" ]]; then
+  die "Profile ${PROFILE} requires --hf-token-file with access to ${MODEL_ID}."
+fi
 
 if [[ "$MTP_ENABLED" == "true" && "$MTP_MODE" != "sglang-eagle" ]]; then
   die "--enable-mtp is not supported by profile ${PROFILE}."
@@ -308,6 +321,12 @@ fi
 if [[ "$CHECK_ONLY" != "true" && "$EUID" -ne 0 ]]; then
   command_exists sudo || die "Run this installer as root or install sudo."
   exec sudo -- "$0" "${ORIGINAL_ARGS[@]}"
+fi
+
+if [[ -n "$HF_TOKEN_FILE" ]]; then
+  [[ -f "$HF_TOKEN_FILE" && -r "$HF_TOKEN_FILE" ]] || die "Cannot read the Hugging Face token file."
+  LC_ALL=C awk 'NR > 1 || length($0) > 256 || $0 !~ /^hf_[[:alnum:]]+$/ {exit 1} END {if (NR != 1) exit 1}' <"$HF_TOKEN_FILE" ||
+    die "Hugging Face token file must contain exactly one hf_ token."
 fi
 
 runtime_args_staged=false
@@ -483,14 +502,23 @@ if [[ "$RUNTIME" == "llamacpp" ]]; then
     fi
   done
 else
-  docker run --rm \
+  docker run --rm --interactive \
     --network bridge \
     --entrypoint python3 \
     --env HF_HUB_DISABLE_TELEMETRY=1 \
     --volume "$model_cache_dir:/root/.cache/huggingface" \
     "$RUNTIME_IMAGE" \
-    -c 'import sys; from huggingface_hub import snapshot_download; snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2])' \
-    "$MODEL_ID" "$MODEL_REVISION"
+    -c '
+import re
+import sys
+from huggingface_hub import snapshot_download
+
+token = sys.stdin.read(258)
+if token and not re.fullmatch(r"hf_[A-Za-z0-9]{1,253}\n?", token):
+    sys.exit("Hugging Face token file must contain exactly one hf_ token.")
+snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2], token=token.rstrip("\n") or False)
+' \
+    "$MODEL_ID" "$MODEL_REVISION" <"${HF_TOKEN_FILE:-/dev/null}"
 fi
 
 printf '%s\n' "$ACCESS_VALUE" >/etc/opsrabbit-llm/api-key

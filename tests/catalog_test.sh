@@ -24,8 +24,8 @@ while IFS= read -r profile_name; do
   profiles_checked=$((profiles_checked + 1))
 done < <(list_profiles)
 
-[[ "$profiles_checked" -eq 22 ]] || {
-  printf 'FAIL: expected 22 profiles, found %d\n' "$profiles_checked" >&2
+[[ "$profiles_checked" -eq 30 ]] || {
+  printf 'FAIL: expected 30 profiles, found %d\n' "$profiles_checked" >&2
   exit 1
 }
 

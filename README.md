@@ -22,6 +22,13 @@ particular GPU product name only when its checkpoint is tied to that hardware.
 | `glm-5.2-w4afp8` | `PhalaCloud/GLM-5.2-W4AFP8` | SGLang | 8× H100 79,000 MiB | 600 GiB | 131,072 | Community GLM W4AFP8 baseline |
 | `glm-5.2-w4a16` | `lowbitcoffee/GLM-5.2-W4A16` | vLLM | 8× A100 79,000 MiB | 600 GiB | 32,768 | Community GLM W4A16 baseline |
 | `glm-5.3-flash-fp8` | Official native FP8, about 306 GiB | vLLM | 8× 79,000 MiB, 386,000 MiB total, compute 9.0+ | 450 GiB | 32,768 | Official GLM-5.3-Flash baseline |
+| `glm-5.3-fp8` | Official full GLM-5.3 FP8 | SGLang | 8× 130,000 MiB, compute 9.0+, 512 GiB host RAM | 900 GiB | 32,768 | Full GLM-5.3 checkpoint |
+| `kimi-k3.1-pro` | Official MXFP4 expert weights, about 1.56 TB | vLLM | 8× 260,000 MiB, compute 10.0+, 512 GiB host RAM | 1,800 GiB | 32,768 | Single-node B300 baseline |
+| `minimax-m3.1-flash` | Official mixed precision checkpoint | vLLM | 8× 79,000 MiB, compute 9.0+, 256 GiB host RAM | 325 GiB | 32,768 | Hopper recipe with Marlin |
+| `ling-3.1-flash-1019` | Official 1019 FP8 checkpoint | SGLang | 8× 130,000 MiB, compute 9.0+, 256 GiB host RAM | 700 GiB | 32,768 | Updated Ling Flash checkpoint |
+| `mimo-v2.6-pro-mopd` | Official MOPD checkpoint, MXFP4 stored weights | vLLM | 8× 130,000 MiB, compute 9.0+, 256 GiB host RAM | 700 GiB | 32,768 | MOPD update for agent tool use |
+| `step-5-preview` | Official FP8 checkpoint | vLLM | 4× 260,000 MiB, compute 10.0+, 256 GiB host RAM | 800 GiB | 32,768 | Single-node B300 baseline |
+| `muse-spark-open-nvfp4` | Official gated NVFP4 checkpoint | SGLang | 4× 260,000 MiB, compute 10.0+, 256 GiB host RAM | 650 GiB | 32,768 | Xhigh reasoning by default |
 | `qwen38-flash-next-fp8` | Official Qwen3.8-Flash-Next FP8, about 173 GiB | vLLM | 8× 140,000 MiB, 900,000 MiB total, compute 9.0+ | 250 GiB | 32,768 | Official high-throughput Flash-Next baseline |
 | `qwen38-flash-next-unsloth-gguf-q4` | Unsloth `UD-Q4_K_XL`, about 103.7 GiB | llama.cpp | 1× 23,000 MiB plus 128 GiB host RAM | 150 GiB | 32,768 | Highest-quality requested Flash-Next GGUF |
 | `qwen38-flash-next-unsloth-gguf-iq4` | Unsloth `UD-IQ4_XS`, about 87.2 GiB | llama.cpp | 1× 23,000 MiB plus 96 GiB host RAM | 130 GiB | 32,768 | Balanced smaller-memory Flash-Next GGUF |
@@ -37,6 +44,7 @@ particular GPU product name only when its checkpoint is tied to that hardware.
 | `qwen38-int4` | Operator-supplied pinned Qwen3.8 AWQ/GPTQ W4A16 | vLLM; SGLang optional | 1× 23,000 MiB, compute 7.5+ | 60 GiB | 32,768 | Format support pending a trusted built-in checkpoint |
 | `deepseek-v4-flash-0731` | Official 0731 mixed FP4/FP8 checkpoint with DSpark weights, about 167 GB | SGLang; vLLM optional | 4× 130,000 MiB, compute 9.0+ | 250 GiB | 32,768 | Preferred DeepSeek profile |
 | `deepseek-v4-flash-0423` | Official preview mixed FP4/FP8 checkpoint, about 160 GB | SGLang; vLLM optional | 8× 79,000 MiB, compute 9.0+ | 240 GiB | 32,768 | Verified H100-class compatibility path |
+| `deepseek-v4.1-flash-1017` | Official 1017 mixed MXFP4/MXFP8 checkpoint | vLLM | 8× 79,000 MiB, compute 9.0+, 512 GiB host RAM | 600 GiB | 32,768 | V4.1 with Engram tables offloaded to host RAM |
 | `deepseek-v4-flash-0731-unsloth-gguf-q2` | Unsloth sharded GGUF Q2, about 96.8 GB | llama.cpp | 1× 15,000 MiB plus 128 GiB host RAM | 140 GiB | 32,768 | Lowest-memory DeepSeek test profile |
 | `deepseek-v4-flash-0731-unsloth-gguf-q3` | Unsloth sharded GGUF Q3, about 128 GB | llama.cpp | 1× 15,000 MiB plus 160 GiB host RAM | 175 GiB | 32,768 | Reduced-memory DeepSeek profile |
 | `deepseek-v4-flash-0731-unsloth-gguf-q4` | Unsloth sharded GGUF Q4, about 155 GB | llama.cpp | 1× 15,000 MiB plus 192 GiB host RAM | 210 GiB | 32,768 | Balanced compatibility profile |
@@ -47,6 +55,25 @@ List the profiles present in the checked-out release:
 ```bash
 ./install.sh --list-profiles
 ```
+
+The eight profiles above for full GLM-5.3, Kimi K3.1 Pro, MiniMax M3.1 Flash,
+Ling 3.1 Flash 1019, MiMo V2.6 Pro MOPD, Step 5 Preview, Muse Spark Open, and
+DeepSeek V4.1 Flash 1017 use single-node configurations adapted from the
+[GLM SGLang cookbook](https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.3),
+[Kimi vLLM recipe](https://recipes.vllm.ai/moonshotai/Kimi-K3.1-Pro),
+[MiniMax vLLM recipe](https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash),
+[Ling model card](https://huggingface.co/inclusionAI/Ling-3.1-flash-1019),
+[MiMo vLLM recipe](https://recipes.vllm.ai/XiaomiMiMo/MiMo-V2.6-Pro-RL),
+[Step vLLM recipe](https://recipes.vllm.ai/stepfun-ai/Step-5-Preview),
+[Muse deployment guide](https://dev.meta.ai/docs/muse-spark-open/deploy), and
+[DeepSeek vLLM recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
+These profiles start with 32,768 tokens and leave speculative decoding off.
+Repository validation checks the profile configuration without loading models.
+Qualify each profile on matching hardware with streaming and a multi-turn
+tool call before relying on it. For Kimi, preserve both `reasoning_content`
+and `tool_calls` from the assistant message when sending back the tool result.
+Muse Xhigh is a request setting on the same NVFP4 checkpoint. Use
+`reasoning_effort: "xhigh"` for clients that set the field explicitly.
 
 Model revisions are pinned, while official SGLang, vLLM, and llama.cpp runtime
 tags deliberately follow their newest compatible published images. Profiles
@@ -169,8 +196,9 @@ The host must already have:
 - At least 80 GiB free in Docker's data root, normally `/var/lib/docker`, for
   runtime image layers. Old runtime images are not removed automatically.
 - Outbound HTTPS access to Ubuntu, NVIDIA, Docker Hub, and Hugging Face.
-- A public Hugging Face model repository. Authentication for gated or private
-  repositories is not implemented yet.
+- Access to the selected Hugging Face model repository. For gated SGLang or
+  vLLM checkpoints, obtain access and provide a read token with
+  `--hf-token-file`. GGUF downloads require a public checkpoint.
 - A firewall appropriate for the chosen listen address.
 
 Clone and inspect a tagged release before running it. Start with the read-only
@@ -215,6 +243,20 @@ the host-offloaded Unsloth profiles:
 ```
 
 ## Install
+
+To install Muse Spark Open, request access from the
+[official checkpoint page](https://huggingface.co/meta-models/Muse-Spark-Open-816B-A42B-NVFP4)
+and put a read token authorized for that repository in a protected file
+containing one line. Pass the file path on every installation or rerun:
+
+```bash
+sudo ./install.sh --profile muse-spark-open-nvfp4 \
+  --data-dir /mnt/llm-data --hf-token-file /secure/path/hf-token
+```
+
+The token is read only for the model download and is separate from the
+service API key. Hardware preflight with `--check-only` can run before
+Hugging Face grants access.
 
 The selected model listens only on the machine itself unless a different
 listen address is explicitly supplied:
@@ -399,10 +441,8 @@ sudo curl --fail \
 Use these client values:
 
 - Base URL: `http://<private-host>:8000/v1`
-- Model: the served name shown at the end of installation. It is
-  `glm-5.2-w4afp8`, `glm-5.2-w4a16`, or a name beginning with `qwen3.8-27b` or
-  `qwen3.8-flash-next` or `deepseek-v4-flash` for the corresponding built-in
-  profiles.
+- Model: the exact served name shown at the end of installation or returned
+  by `/v1/models`. The default for each profile is its `PROFILE_SERVED_MODEL_NAME`.
 - API key: the value in `/etc/opsrabbit-llm/api-key`
 
 An illustrative OpsRabbit provider record is available at
@@ -453,6 +493,9 @@ sudo ./uninstall.sh
   pins deliberately. Custom models require an explicit
   `--trust-remote-code` choice.
 - Do not commit API keys, cloud credentials, SSH keys, or Hugging Face tokens.
+- The Hugging Face token goes to the temporary downloader through standard
+  input. It is not saved in the install configuration or passed to the
+  serving container. Restrict the token to read access to the selected model.
 - Keep the model data directory root-owned and do not make its top-level cache
   directories writable by unprivileged users.
 

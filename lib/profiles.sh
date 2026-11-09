@@ -29,6 +29,7 @@ reset_profile() {
   PROFILE_SGLANG_MEM_FRACTION="0.85"
   PROFILE_GPU_MEMORY_UTILIZATION="0.85"
   PROFILE_TRUST_REMOTE_CODE=false
+  PROFILE_REQUIRES_HF_TOKEN=false
   PROFILE_REQUIRES_CUSTOM_MODEL=false
   PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE=false
   PROFILE_GGUF_FILENAME=""
@@ -84,6 +85,8 @@ load_profile() {
     die "Profile ${profile_name} has an invalid vLLM memory utilization."
   [[ "$PROFILE_TRUST_REMOTE_CODE" == "true" || "$PROFILE_TRUST_REMOTE_CODE" == "false" ]] ||
     die "Profile ${profile_name} has an invalid trust-remote-code setting."
+  [[ "$PROFILE_REQUIRES_HF_TOKEN" == "true" || "$PROFILE_REQUIRES_HF_TOKEN" == "false" ]] ||
+    die "Profile ${profile_name} has an invalid Hugging Face token requirement."
   [[ "$PROFILE_REQUIRES_CUSTOM_MODEL" == "true" || "$PROFILE_REQUIRES_CUSTOM_MODEL" == "false" ]] ||
     die "Profile ${profile_name} has an invalid custom-model setting."
   [[ "$PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE" == "true" || "$PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE" == "false" ]] ||
