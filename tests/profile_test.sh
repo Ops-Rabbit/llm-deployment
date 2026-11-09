@@ -185,4 +185,35 @@ expect_failure_contains \
   --model unsloth/Qwen3.8-27B-FP8 \
   --model-revision d51e38f6f2b5877bb91e06ba231e41ffc63bde6f --check-only
 
+while IFS='|' read -r profile runtime checkpoint; do
+  expect_failure_contains \
+    "${profile} selects the published checkpoint during preflight" \
+    "Selected profile ${profile}: ${runtime}, ${checkpoint}@" \
+    ./install.sh --data-dir / --profile "$profile" --check-only
+done <<'EOF'
+kimi-k3.1-pro|vllm|moonshotai/Kimi-K3.1-Pro
+glm-5.3-fp8|sglang|zai-org/GLM-5.3
+deepseek-v4.1-flash-1017|vllm|deepseek-ai/DeepSeek-V4.1-Flash-1017
+minimax-m3.1-flash|vllm|MiniMaxAI/MiniMax-M3.1-Flash
+ling-3.1-flash-1019|sglang|inclusionAI/Ling-3.1-flash-1019
+mimo-v2.6-pro-mopd|vllm|XiaomiMiMo/MiMo-V2.6-Pro-MOPD
+step-5-preview|vllm|stepfun-ai/Step-5-Preview
+muse-spark-open-nvfp4|sglang|meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+EOF
+
+expect_failure_contains \
+  "gated installation requires an explicit token file before host setup" \
+  "Profile muse-spark-open-nvfp4 requires --hf-token-file" \
+  ./install.sh --data-dir / --profile muse-spark-open-nvfp4
+
+expect_failure_contains \
+  "an explicit token file must be a readable regular file" \
+  "Cannot read the Hugging Face token file" \
+  ./install.sh --data-dir / --profile muse-spark-open-nvfp4 --hf-token-file / --check-only
+
+expect_failure_contains \
+  "GGUF download rejects a Hugging Face token file" \
+  "--hf-token-file is supported only for SGLang and vLLM model downloads" \
+  ./install.sh --data-dir / --profile qwen38-unsloth-gguf-q4 --hf-token-file / --check-only
+
 printf 'PASS: %d profile checks\n' "$tests_run"

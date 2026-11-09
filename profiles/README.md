@@ -36,6 +36,7 @@ arguments. This keeps model churn out of `install.sh` and `run-model.sh`.
 | `PROFILE_SGLANG_MEM_FRACTION` | SGLang GPU-memory reservation fraction |
 | `PROFILE_GPU_MEMORY_UTILIZATION` | vLLM GPU-memory utilization fraction |
 | `PROFILE_TRUST_REMOTE_CODE` | Whether the built-in checkpoint needs repository code |
+| `PROFILE_REQUIRES_HF_TOKEN` | Require `--hf-token-file` for a gated SGLang or vLLM checkpoint |
 | `PROFILE_REQUIRES_CUSTOM_MODEL` | Require the operator to provide model ID and revision |
 | `PROFILE_PRESERVE_FAMILY_ON_MODEL_OVERRIDE` | Retain parsers when using a compatible mirror/quant |
 | `PROFILE_GGUF_FILENAME` | Exact root-level GGUF file downloaded for llama.cpp; retained for simple single-file models |

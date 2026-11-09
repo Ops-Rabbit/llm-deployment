@@ -40,7 +40,7 @@ rm -f \
   /usr/local/lib/opsrabbit-llm/run-model.sh \
   /usr/local/sbin/opsrabbit-llm-healthcheck
 rm -f /etc/opsrabbit-llm/install.conf /etc/opsrabbit-llm/runtime.args /etc/opsrabbit-llm/runtime.args.pending /etc/opsrabbit-llm/api-key /etc/opsrabbit-llm/admin-key /etc/opsrabbit-llm/curl.conf
-rm -f /etc/opsrabbit-llm/sglang-auth.json /etc/opsrabbit-llm/vllm.env /run/opsrabbit-llm/vllm.sock /run/opsrabbit-llm/backend.sock
+rm -f /etc/opsrabbit-llm/sglang-auth.yaml /etc/opsrabbit-llm/sglang-auth.json /etc/opsrabbit-llm/vllm.env /run/opsrabbit-llm/vllm.sock /run/opsrabbit-llm/backend.sock
 rmdir /etc/opsrabbit-llm /usr/local/lib/opsrabbit-llm /run/opsrabbit-llm 2>/dev/null || true
 
 systemctl daemon-reload
